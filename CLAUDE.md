@@ -63,15 +63,20 @@ gmail_analyzer/
 
 ### Windows（社用PC - 運用用）
 
-- **プロジェクトパス**: `C:\Users\shimi\Documents\gmail_analyzer`
-- **用途**: 実データでのメール取得・解析
+- **プロジェクトパス**: `C:\Users\shimi\OneDrive\Desktop\VScode\gmail_analyzer`
+- **WSLパス**: `/mnt/c/Users/shimi/OneDrive/Desktop/VScode/gmail_analyzer`
+- **用途**: 実データでのメール取得・解析、Claude Codeでの開発
 - **起動コマンド**:
   ```cmd
-  cd %USERPROFILE%\Documents\gmail_analyzer
+  cd C:\Users\shimi\OneDrive\Desktop\VScode\gmail_analyzer
   venv\Scripts\activate
   streamlit run app.py
   ```
 - **ブラウザ**: `http://localhost:8501`
+- **Git操作（WSLから）**: WSLではGitHub認証が未設定のため、Windows側のGitを使う
+  ```bash
+  /mnt/c/Program\ Files/Git/bin/git.exe -C "C:/Users/shimi/OneDrive/Desktop/VScode/gmail_analyzer" push origin main
+  ```
 
 ### .env ファイル（Mac側の設定内容）
 
@@ -142,18 +147,31 @@ Gmail APIのアプリ審査が未完了のため、OAuth同意画面でテスト
 - [x] Streamlit Cloudのアプリをパブリックに設定
 - [x] Google Cloud Consoleでcloudlink.company@gmail.comをテストユーザーに追加
 - [x] Windows側でcloudlink.company@gmail.comとのGmail接続成功
-- [x] Gmailフィルタで「SES案件」ラベル自動付与設定
+- [x] Gmailフィルタで「SES案件」ラベル自動付与設定（deliveredto: 条件で包括的にカバー）
+- [x] Figma連携の調査→不採用（$16/月のコスト）
+- [x] Next.js + FastAPI 移行計画の策定（フィグマ連携/CLAUDE.md に詳細あり）
+- [x] Windows側のGitHub同期（フィグマ連携メモ、Gmailタグ付けメモをpush済み）
 
-### 未完了（次のステップ）
-- [ ] **Windows側の.envにGemini APIキーを設定**（最優先）
-  - `notepad C:\Users\shimi\Documents\gmail_analyzer\.env` でメモ帳を開く
-  - Mac側の.envと同じ内容に書き換える（特にGEMINI_API_KEY）
-- [ ] メール取得→AI解析の動作確認
-- [ ] 実データでのダッシュボード表示確認
-- [ ] 契約形態の分類改善（派遣 vs 準委任）
-- [ ] 給与フォーマット標準化（時給 vs 月給）
-- [ ] AI信頼度スコアの実装
-- [ ] 本格運用時のStreamlit Cloud Secrets設定（クラウドでもGmail接続可能にする）
+### 次にやること（優先度順）
+
+#### 最優先: Streamlit版の動作確認
+1. [ ] **Windows側の.envにGemini APIキーを設定**
+   - `notepad C:\Users\shimi\OneDrive\Desktop\VScode\gmail_analyzer\.env` でメモ帳を開く
+   - Mac側の.envと同じ内容に書き換える（特にGEMINI_API_KEY）
+2. [ ] メール取得→AI解析の動作確認
+3. [ ] 実データでのダッシュボード表示確認
+
+#### 中期: Streamlit版の改善
+4. [ ] 契約形態の分類改善（派遣 vs 準委任）
+5. [ ] 給与フォーマット標準化（時給 vs 月給）
+6. [ ] AI信頼度スコアの実装
+
+#### 長期: Next.js + FastAPI 移行（6フェーズ）
+7. [ ] Phase 0: プロジェクトセットアップ（モノレポ構造作成）
+8. [ ] Phase 1〜6: 段階的に移行（詳細は フィグマ連携/CLAUDE.md 参照）
+
+#### その他
+- [ ] 本格運用時のStreamlit Cloud Secrets設定
 - [ ] GitHubユーザー名変更（本格運用時）
 
 ## 開発ワークフロー
@@ -169,4 +187,16 @@ Gmail APIのアプリ審査が未完了のため、OAuth同意画面でテスト
 - **認証ファイル**: `credentials/`フォルダは.gitignoreで除外。GitHubにアップしない。
 - **トークン再認証**: 別のGmailアカウントに切り替える場合は`token.json`を削除して再接続。
   - Mac: `rm ~/Desktop/gmail_analyzer/credentials/token.json`
-  - Windows: `del C:\Users\shimi\Documents\gmail_analyzer\credentials\token.json`
+  - Windows: `del C:\Users\shimi\OneDrive\Desktop\VScode\gmail_analyzer\credentials\token.json`
+
+## メモの管理方針
+
+### GitHubで共有されるメモ（Mac・Windows両方で見える）
+- `CLAUDE.md` - プロジェクト全体の設定・状況
+- `フィグマ連携/` - Figma調査メモ、Next.js移行計画
+- `Gmailタグ付け/` - Gmailフィルタ設定の作業記録
+- → git push/pull で Mac・Windows間を同期
+
+### Claude Code専用メモ（各PCのローカルのみ）
+- Claude Codeが前回の作業を思い出すための記憶ファイル
+- 各PCごとに別々に保存される（GitHubには上がらない）
