@@ -57,5 +57,6 @@ class BatchResult(BaseModel):
     emails_fetched: int = 0
     emails_processed: int = 0
     listings_created: int = 0
+    api_errors: int = 0
     errors: list[str] = Field(default_factory=list)
     status: str = "completed"

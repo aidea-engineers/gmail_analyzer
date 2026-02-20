@@ -54,18 +54,26 @@ def run_extraction_only(
             try:
                 extraction = extract_from_email(subject, body)
 
-                if extraction and extraction.is_job_listing:
+                if extraction is None:
+                    # API失敗時は未処理のまま残す（次回再試行可能）
+                    result.api_errors += 1
+                    error_msg = f"メールID {email_id}: AI解析失敗（API エラー）"
+                    logger.warning(error_msg)
+                    errors.append(error_msg)
+                elif extraction.is_job_listing:
                     insert_job_listing(email_id, extraction.model_dump())
                     result.listings_created += 1
-
-                mark_email_processed(email_id)
-                result.emails_processed += 1
+                    mark_email_processed(email_id)
+                    result.emails_processed += 1
+                else:
+                    # 案件ではないメール → 処理済みにする
+                    mark_email_processed(email_id)
+                    result.emails_processed += 1
 
             except Exception as e:
                 error_msg = f"メールID {email_id}: {str(e)}"
                 logger.error(error_msg)
                 errors.append(error_msg)
-                mark_email_processed(email_id)
 
             if progress_callback:
                 progress_callback(
@@ -73,7 +81,8 @@ def run_extraction_only(
                         "phase": "extraction",
                         "current": i + 1,
                         "total": total,
-                        "message": f"AI解析中: {i + 1}/{total} メール (案件: {result.listings_created}件)",
+                        "message": f"AI解析中: {i + 1}/{total} メール (案件: {result.listings_created}件"
+                        + (f", 失敗: {result.api_errors}件)" if result.api_errors > 0 else ")"),
                     }
                 )
 

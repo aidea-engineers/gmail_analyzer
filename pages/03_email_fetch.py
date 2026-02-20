@@ -42,11 +42,17 @@ with col1:
             progress_bar.empty()
             status_text.empty()
 
-            if result.status == "completed":
+            if result.status == "completed" and result.api_errors == 0:
                 st.success(
                     f"完了: 取得 {result.emails_fetched}件 / "
                     f"処理 {result.emails_processed}件 / "
                     f"案件 {result.listings_created}件"
+                )
+            elif result.status == "completed" and result.api_errors > 0:
+                st.warning(
+                    f"一部失敗: 処理 {result.emails_processed}件 / "
+                    f"案件 {result.listings_created}件 / "
+                    f"AI解析失敗 {result.api_errors}件（レート制限の可能性。時間をおいて再実行してください）"
                 )
             else:
                 st.error(f"エラーが発生しました: {', '.join(result.errors[:3])}")
@@ -69,9 +75,15 @@ with col2:
         progress_bar.empty()
         status_text.empty()
 
-        if result.status == "completed":
+        if result.status == "completed" and result.api_errors == 0:
             st.success(
                 f"完了: 処理 {result.emails_processed}件 / 案件 {result.listings_created}件"
+            )
+        elif result.status == "completed" and result.api_errors > 0:
+            st.warning(
+                f"一部失敗: 処理 {result.emails_processed}件 / "
+                f"案件 {result.listings_created}件 / "
+                f"AI解析失敗 {result.api_errors}件（レート制限の可能性。時間をおいて再実行してください）"
             )
         else:
             st.error(f"エラー: {', '.join(result.errors[:3])}")
