@@ -1,7 +1,7 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-async function fetchAPI<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
+async function fetchAPI<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, { cache: "no-store", ...init });
   if (!res.ok) {
     throw new Error(`API error: ${res.status} ${res.statusText}`);
   }
@@ -47,4 +47,45 @@ export function getFetchLogs(limit = 10) {
   return fetchAPI<{ logs: import("@/types").FetchLog[] }>(
     `/api/fetch/logs?limit=${limit}`
   );
+}
+
+export function startFullPipeline() {
+  return fetchAPI<{ job_id: string }>("/api/fetch/full-pipeline", {
+    method: "POST",
+  });
+}
+
+export function startAIOnly() {
+  return fetchAPI<{ job_id: string }>("/api/fetch/ai-only", {
+    method: "POST",
+  });
+}
+
+export function insertMockData(count = 150) {
+  return fetchAPI<{ inserted: number }>(`/api/fetch/mock?count=${count}`, {
+    method: "POST",
+  });
+}
+
+export function deleteAllData() {
+  return fetchAPI<{ message: string }>("/api/fetch/data", {
+    method: "DELETE",
+  });
+}
+
+export function getProgressURL(jobId: string) {
+  return `${API_BASE}/api/fetch/progress/${jobId}`;
+}
+
+/* Settings */
+export function getSettings() {
+  return fetchAPI<import("@/types").Settings>("/api/settings");
+}
+
+export function updateSettings(data: import("@/types").SettingsUpdate) {
+  return fetchAPI<{ message: string }>("/api/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
 }

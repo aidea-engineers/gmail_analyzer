@@ -77,7 +77,7 @@ export default function DashboardPage() {
       ) : (
         <>
           {/* KPI カード */}
-          <div className="grid grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <KPICard label="総案件数" value={`${kpis?.total ?? 0}件`} icon="📋" />
             <KPICard label="平均単価" value={`${kpis?.avg_price ?? 0}万円`} icon="💰" />
             <KPICard label="本日の新着" value={`${kpis?.today_count ?? 0}件`} icon="🆕" />
@@ -85,7 +85,7 @@ export default function DashboardPage() {
           </div>
 
           {/* チャート 2x2 */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <SkillBarChart data={charts?.skills ?? []} />
             <PriceHistogram data={charts?.prices ?? []} />
             <AreaPieChart data={charts?.areas ?? []} />

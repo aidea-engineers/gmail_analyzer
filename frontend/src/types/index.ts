@@ -64,6 +64,8 @@ export interface SearchFilters {
 }
 
 export interface FetchStatus {
+  gmail_connected: boolean;
+  gemini_api_key_set: boolean;
   total_emails: number;
   processed_emails: number;
   unprocessed_emails: number;
@@ -79,4 +81,40 @@ export interface FetchLog {
   emails_processed: number;
   errors: string;
   query_used: string;
+}
+
+export interface Settings {
+  gemini_model: string;
+  gemini_api_key_set: boolean;
+  gmail_labels: string[];
+  gmail_keywords: string[];
+  batch_size: number;
+  max_emails_per_fetch: number;
+  gemini_delay_seconds: number;
+  db_path: string;
+}
+
+export interface SettingsUpdate {
+  gemini_api_key?: string;
+  gemini_model?: string;
+  gmail_labels?: string;
+  gmail_keywords?: string;
+  batch_size?: number;
+  max_emails_per_fetch?: number;
+  gemini_delay_seconds?: number;
+}
+
+export interface JobProgress {
+  phase: string;
+  current: number;
+  total: number;
+  message: string;
+  done?: boolean;
+  result?: {
+    emails_fetched: number;
+    emails_processed: number;
+    listings_created: number;
+    api_errors: number;
+    status: string;
+  };
 }
