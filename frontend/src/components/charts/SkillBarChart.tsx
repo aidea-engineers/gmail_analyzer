@@ -23,13 +23,13 @@ export default function SkillBarChart({ data }: { data: SkillCount[] }) {
       {top15.length === 0 ? (
         <p className="text-sm text-slate-400 py-8 text-center">データなし</p>
       ) : (
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={top15} layout="vertical" margin={{ left: 60 }}>
+        <ResponsiveContainer width="100%" height={400}>
+          <BarChart data={top15} layout="vertical" margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis type="number" />
-            <YAxis dataKey="skill_name" type="category" width={80} tick={{ fontSize: 12 }} />
+            <XAxis type="number" allowDecimals={false} />
+            <YAxis dataKey="skill_name" type="category" width={100} tick={{ fontSize: 12 }} />
             <Tooltip />
-            <Bar dataKey="count" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+            <Bar dataKey="count" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={16} />
           </BarChart>
         </ResponsiveContainer>
       )}
