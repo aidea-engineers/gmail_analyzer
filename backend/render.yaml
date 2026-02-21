@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: gmail-analyzer-api
+    runtime: docker
+    plan: free
+    rootDir: backend
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.0-flash
+      - key: CORS_ORIGINS
+        sync: false
+      - key: GMAIL_TOKEN_JSON
+        sync: false
+      - key: GMAIL_CREDENTIALS_JSON
+        sync: false
+      - key: GMAIL_LABELS
+        value: SES案件
+      - key: GMAIL_KEYWORDS
+        value: 案件,募集,エンジニア,SE,PG

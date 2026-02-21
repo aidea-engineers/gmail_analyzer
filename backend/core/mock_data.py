@@ -132,22 +132,44 @@ def generate_and_insert(count: int = 150) -> int:
 
             # emails テーブルに挿入
             try:
-                cursor = conn.execute(
-                    """INSERT OR IGNORE INTO emails
-                       (gmail_message_id, subject, sender, received_at, body_text, labels, is_processed)
-                       VALUES (?, ?, ?, ?, ?, ?, 1)""",
-                    (
-                        mock["gmail_message_id"],
-                        mock["subject"],
-                        mock["sender"],
-                        mock["received_at"],
-                        mock["body_text"],
-                        mock["labels"],
-                    ),
-                )
-                if cursor.rowcount == 0:
-                    continue
-                email_id = cursor.lastrowid
+                if conn.is_pg:
+                    cursor = conn.execute(
+                        """INSERT INTO emails
+                           (gmail_message_id, subject, sender, received_at, body_text, labels, is_processed)
+                           VALUES (?, ?, ?, ?, ?, ?, ?)
+                           ON CONFLICT (gmail_message_id) DO NOTHING
+                           RETURNING id""",
+                        (
+                            mock["gmail_message_id"],
+                            mock["subject"],
+                            mock["sender"],
+                            mock["received_at"],
+                            mock["body_text"],
+                            mock["labels"],
+                            True,
+                        ),
+                    )
+                    row = cursor.fetchone()
+                    if not row:
+                        continue
+                    email_id = row["id"]
+                else:
+                    cursor = conn.execute(
+                        """INSERT OR IGNORE INTO emails
+                           (gmail_message_id, subject, sender, received_at, body_text, labels, is_processed)
+                           VALUES (?, ?, ?, ?, ?, ?, 1)""",
+                        (
+                            mock["gmail_message_id"],
+                            mock["subject"],
+                            mock["sender"],
+                            mock["received_at"],
+                            mock["body_text"],
+                            mock["labels"],
+                        ),
+                    )
+                    if cursor.rowcount == 0:
+                        continue
+                    email_id = cursor.lastrowid
             except Exception:
                 continue
 
@@ -155,28 +177,32 @@ def generate_and_insert(count: int = 150) -> int:
             skills_json = json.dumps(mock["required_skills"], ensure_ascii=False)
             raw_json = json.dumps(mock, ensure_ascii=False, default=str)
 
-            cursor = conn.execute(
-                """INSERT INTO job_listings
+            sql = """INSERT INTO job_listings
                    (email_id, company_name, work_area, unit_price,
                     unit_price_min, unit_price_max, required_skills,
                     project_details, job_type, raw_extraction, confidence, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    email_id,
-                    mock["company_name"],
-                    mock["work_area"],
-                    mock["unit_price"],
-                    mock["unit_price_min"],
-                    mock["unit_price_max"],
-                    skills_json,
-                    mock["project_details"],
-                    mock["job_type"],
-                    raw_json,
-                    mock["confidence"],
-                    listing_date.isoformat(),
-                ),
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+            params = (
+                email_id,
+                mock["company_name"],
+                mock["work_area"],
+                mock["unit_price"],
+                mock["unit_price_min"],
+                mock["unit_price_max"],
+                skills_json,
+                mock["project_details"],
+                mock["job_type"],
+                raw_json,
+                mock["confidence"],
+                listing_date.isoformat(),
             )
-            listing_id = cursor.lastrowid
+
+            if conn.is_pg:
+                cursor = conn.execute(sql + " RETURNING id", params)
+                listing_id = cursor.fetchone()["id"]
+            else:
+                cursor = conn.execute(sql, params)
+                listing_id = cursor.lastrowid
 
             # skills テーブルに挿入
             for skill in mock["required_skills"]:

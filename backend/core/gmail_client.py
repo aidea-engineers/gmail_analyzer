@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import logging
 from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
@@ -11,21 +12,44 @@ from config import Config
 logger = logging.getLogger(__name__)
 
 
-def is_authenticated() -> bool:
-    """Gmail OAuth トークンが有効か確認する"""
+def _load_credentials_from_env():
+    """環境変数からOAuth認証情報を読み込む"""
+    from google.oauth2.credentials import Credentials
+
+    token_json = Config.GMAIL_TOKEN_JSON
+    if not token_json:
+        return None
+    try:
+        return Credentials.from_authorized_user_info(
+            json.loads(token_json),
+            scopes=["https://www.googleapis.com/auth/gmail.readonly"],
+        )
+    except Exception as e:
+        logger.warning(f"環境変数からのトークン読み込みエラー: {e}")
+        return None
+
+
+def _load_credentials_from_file():
+    """ファイルからOAuth認証情報を読み込む"""
+    from google.oauth2.credentials import Credentials
+
     token_path = Config.GMAIL_TOKEN_PATH
     if not token_path.exists():
-        return False
+        return None
     try:
-        from google.oauth2.credentials import Credentials
-
-        creds = Credentials.from_authorized_user_file(
+        return Credentials.from_authorized_user_file(
             str(token_path),
             scopes=["https://www.googleapis.com/auth/gmail.readonly"],
         )
-        return creds is not None and creds.valid
-    except Exception:
-        return False
+    except Exception as e:
+        logger.warning(f"トークン読み込みエラー: {e}")
+        return None
+
+
+def is_authenticated() -> bool:
+    """Gmail OAuth トークンが有効か確認する"""
+    creds = _load_credentials_from_env() or _load_credentials_from_file()
+    return creds is not None and creds.valid
 
 
 def get_gmail_service():
@@ -36,17 +60,11 @@ def get_gmail_service():
     from googleapiclient.discovery import build
 
     SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
-    creds = None
 
-    token_path = Config.GMAIL_TOKEN_PATH
-    credentials_path = Config.GMAIL_CREDENTIALS_PATH
+    # 1) トークンを読み込む（環境変数優先 → ファイル）
+    creds = _load_credentials_from_env() or _load_credentials_from_file()
 
-    if token_path.exists():
-        try:
-            creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
-        except Exception as e:
-            logger.warning(f"トークン読み込みエラー: {e}")
-
+    # 2) 期限切れならリフレッシュ
     if creds and creds.expired and creds.refresh_token:
         try:
             creds.refresh(Request())
@@ -54,21 +72,39 @@ def get_gmail_service():
             logger.error(f"トークンリフレッシュエラー: {e}")
             creds = None
 
+    # 3) 有効なトークンがなければ新規認証フロー
     if not creds or not creds.valid:
-        if not credentials_path.exists():
-            logger.error(f"credentials.json が見つかりません: {credentials_path}")
-            return None
-        try:
-            flow = InstalledAppFlow.from_client_secrets_file(str(credentials_path), SCOPES)
-            creds = flow.run_local_server(port=0)
-        except Exception as e:
-            logger.error(f"OAuth認証エラー: {e}")
+        credentials_json = Config.GMAIL_CREDENTIALS_JSON
+        credentials_path = Config.GMAIL_CREDENTIALS_PATH
+
+        if credentials_json:
+            try:
+                flow = InstalledAppFlow.from_client_config(
+                    json.loads(credentials_json), SCOPES
+                )
+                creds = flow.run_local_server(port=0)
+            except Exception as e:
+                logger.error(f"環境変数からのOAuth認証エラー: {e}")
+                return None
+        elif credentials_path.exists():
+            try:
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    str(credentials_path), SCOPES
+                )
+                creds = flow.run_local_server(port=0)
+            except Exception as e:
+                logger.error(f"OAuth認証エラー: {e}")
+                return None
+        else:
+            logger.error("OAuth credentials が設定されていません")
             return None
 
-    # トークンを保存
-    token_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(str(token_path), "w") as f:
-        f.write(creds.to_json())
+    # 4) トークンをファイルに保存（ファイルベース認証の場合のみ）
+    if not Config.GMAIL_TOKEN_JSON:
+        token_path = Config.GMAIL_TOKEN_PATH
+        token_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(str(token_path), "w") as f:
+            f.write(creds.to_json())
 
     return build("gmail", "v1", credentials=creds)
 
@@ -226,7 +262,11 @@ def fetch_and_store_emails(
             "SELECT MAX(received_at) as latest FROM emails"
         ).fetchone()
         if row and row["latest"]:
-            after_date = row["latest"][:10].replace("-", "/")
+            latest = row["latest"]
+            if isinstance(latest, datetime):
+                after_date = latest.strftime("%Y/%m/%d")
+            else:
+                after_date = str(latest)[:10].replace("-", "/")
 
     query = build_query(after_date=after_date)
     logger.info(f"Gmail検索クエリ: {query}")

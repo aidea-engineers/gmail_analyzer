@@ -28,7 +28,7 @@ def fetch_status():
             "SELECT COUNT(*) as cnt FROM emails"
         ).fetchone()["cnt"]
         processed_emails = conn.execute(
-            "SELECT COUNT(*) as cnt FROM emails WHERE is_processed = 1"
+            "SELECT COUNT(*) as cnt FROM emails WHERE is_processed = TRUE"
         ).fetchone()["cnt"]
         unprocessed_emails = total_emails - processed_emails
         total_listings = conn.execute(

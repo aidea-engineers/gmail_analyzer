@@ -4,6 +4,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from config import Config
 from core.database import init_db
 from routers import dashboard, search, fetch, settings
 
@@ -13,12 +14,10 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# CORS設定（フロントエンドからのアクセスを許可）
+# CORS設定（環境変数で動的に設定）
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",  # Next.js dev server
-    ],
+    allow_origins=Config.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

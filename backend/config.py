@@ -34,3 +34,14 @@ class Config:
     GEMINI_DELAY_SECONDS: float = float(os.getenv("GEMINI_DELAY_SECONDS", "1.0"))
 
     DB_PATH: Path = PROJECT_ROOT / os.getenv("DB_PATH", "data/gmail_analyzer.db")
+
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "")
+
+    CORS_ORIGINS: list[str] = [
+        o.strip()
+        for o in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+        if o.strip()
+    ]
+
+    GMAIL_TOKEN_JSON: str = os.getenv("GMAIL_TOKEN_JSON", "")
+    GMAIL_CREDENTIALS_JSON: str = os.getenv("GMAIL_CREDENTIALS_JSON", "")

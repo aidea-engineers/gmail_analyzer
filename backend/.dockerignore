@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+.env.*
+!.env.example
+credentials/
+data/*.db
+data/*.log
+venv/
+.venv/
+.git/
+.gitignore
+*.md
