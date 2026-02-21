@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.database import init_db
+from routers import dashboard, search, fetch, settings
 
 app = FastAPI(
     title="Gmail Analyzer API",
@@ -22,6 +23,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ルーター登録
+app.include_router(dashboard.router)
+app.include_router(search.router)
+app.include_router(fetch.router)
+app.include_router(settings.router)
 
 
 @app.on_event("startup")
