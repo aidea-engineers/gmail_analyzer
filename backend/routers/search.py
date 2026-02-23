@@ -32,6 +32,7 @@ def search_filters():
 @router.get("/listings")
 def search_listings_api(
     keyword: str = "",
+    keyword_mode: str = Query("and", description="and または or"),
     skills: Optional[str] = Query(None, description="カンマ区切りスキル"),
     areas: Optional[str] = Query(None, description="カンマ区切りエリア"),
     job_types: Optional[str] = Query(None, description="カンマ区切り職種"),
@@ -46,6 +47,7 @@ def search_listings_api(
 
     results = search_listings(
         keyword=keyword,
+        keyword_mode=keyword_mode,
         skills=skills_list,
         areas=areas_list,
         job_types=types_list,
@@ -89,6 +91,7 @@ def search_listings_api(
 @router.get("/export")
 def export_csv(
     keyword: str = "",
+    keyword_mode: str = Query("and", description="and または or"),
     skills: Optional[str] = None,
     areas: Optional[str] = None,
     job_types: Optional[str] = None,
@@ -103,6 +106,7 @@ def export_csv(
 
     results = search_listings(
         keyword=keyword,
+        keyword_mode=keyword_mode,
         skills=skills_list,
         areas=areas_list,
         job_types=types_list,

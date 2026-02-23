@@ -320,6 +320,7 @@ def insert_job_listing(email_id: int, extraction: dict) -> int:
 
 def search_listings(
     keyword: str = "",
+    keyword_mode: str = "and",
     skills: list[str] | None = None,
     areas: list[str] | None = None,
     job_types: list[str] | None = None,
@@ -338,13 +339,29 @@ def search_listings(
     params = []
 
     if keyword:
-        query += """ AND (
-            jl.company_name LIKE ? OR jl.work_area LIKE ?
-            OR jl.project_details LIKE ? OR jl.required_skills LIKE ?
-            OR e.subject LIKE ?
-        )"""
-        like = f"%{keyword}%"
-        params.extend([like] * 5)
+        keywords = keyword.split()
+        if len(keywords) <= 1:
+            # 単一キーワード（従来通り）
+            query += """ AND (
+                jl.company_name LIKE ? OR jl.work_area LIKE ?
+                OR jl.project_details LIKE ? OR jl.required_skills LIKE ?
+                OR e.subject LIKE ?
+            )"""
+            like = f"%{keyword.strip()}%"
+            params.extend([like] * 5)
+        else:
+            # 複数キーワード（AND/OR切替）
+            connector = " AND " if keyword_mode == "and" else " OR "
+            kw_clauses = []
+            for kw in keywords:
+                kw_clauses.append("""(
+                    jl.company_name LIKE ? OR jl.work_area LIKE ?
+                    OR jl.project_details LIKE ? OR jl.required_skills LIKE ?
+                    OR e.subject LIKE ?
+                )""")
+                like = f"%{kw}%"
+                params.extend([like] * 5)
+            query += f" AND ({connector.join(kw_clauses)})"
 
     if skills:
         placeholders = ",".join("?" * len(skills))

@@ -13,6 +13,7 @@ export default function SearchPage() {
 
   // フィルター状態
   const [keyword, setKeyword] = useState("");
+  const [keywordMode, setKeywordMode] = useState<"and" | "or">("and");
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
   const [selectedJobTypes, setSelectedJobTypes] = useState<string[]>([]);
@@ -32,7 +33,10 @@ export default function SearchPage() {
 
   const buildParams = useCallback(() => {
     const params: Record<string, string> = {};
-    if (keyword) params.keyword = keyword;
+    if (keyword) {
+      params.keyword = keyword;
+      params.keyword_mode = keywordMode;
+    }
     if (selectedSkills.length) params.skills = selectedSkills.join(",");
     if (selectedAreas.length) params.areas = selectedAreas.join(",");
     if (selectedJobTypes.length) params.job_types = selectedJobTypes.join(",");
@@ -41,7 +45,7 @@ export default function SearchPage() {
     if (dateFrom) params.date_from = dateFrom;
     if (dateTo) params.date_to = dateTo;
     return params;
-  }, [keyword, selectedSkills, selectedAreas, selectedJobTypes, priceMin, priceMax, dateFrom, dateTo]);
+  }, [keyword, keywordMode, selectedSkills, selectedAreas, selectedJobTypes, priceMin, priceMax, dateFrom, dateTo]);
 
   const doSearch = useCallback(() => {
     setLoading(true);
@@ -69,6 +73,7 @@ export default function SearchPage() {
 
   const clearFilters = () => {
     setKeyword("");
+    setKeywordMode("and");
     setSelectedSkills([]);
     setSelectedAreas([]);
     setSelectedJobTypes([]);
@@ -98,10 +103,33 @@ export default function SearchPage() {
           type="text"
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
-          placeholder="会社名・スキル等"
-          className="w-full mb-3 px-2 py-1.5 border rounded text-sm"
+          placeholder="AWS Java（スペース区切り）"
+          className="w-full mb-2 px-2 py-1.5 border rounded text-sm"
           style={{ borderColor: "var(--border)" }}
         />
+        <div className="flex items-center gap-1 mb-3">
+          <span className="text-xs text-slate-400 mr-1">検索条件:</span>
+          <button
+            onClick={() => setKeywordMode("and")}
+            className={`px-2 py-0.5 text-xs rounded-l border transition-colors ${
+              keywordMode === "and"
+                ? "bg-blue-600 text-white border-blue-600"
+                : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"
+            }`}
+          >
+            AND
+          </button>
+          <button
+            onClick={() => setKeywordMode("or")}
+            className={`px-2 py-0.5 text-xs rounded-r border border-l-0 transition-colors ${
+              keywordMode === "or"
+                ? "bg-blue-600 text-white border-blue-600"
+                : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"
+            }`}
+          >
+            OR
+          </button>
+        </div>
 
         {/* スキル */}
         <label className="block text-xs text-slate-500 mb-1">スキル</label>
