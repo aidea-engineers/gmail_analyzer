@@ -135,8 +135,33 @@ def start_ai_only(background_tasks: BackgroundTasks):
     return {"job_id": job_id}
 
 
+def _run_cron_pipeline_bg():
+    """cronパイプラインをバックグラウンドで実行する"""
+    try:
+        from core.gmail_client import get_gmail_service
+        from core.batch_processor import run_full_pipeline
+
+        service = get_gmail_service()
+        if not service:
+            logger.error("Cron pipeline: Gmail接続に失敗しました")
+            return
+
+        result = run_full_pipeline(gmail_service=service)
+
+        logger.info(
+            "Cron pipeline completed: fetched=%d processed=%d listings=%d errors=%d",
+            result.emails_fetched, result.emails_processed,
+            result.listings_created, result.api_errors,
+        )
+    except Exception:
+        logger.exception("Cron pipeline failed")
+
+
 @router.post("/cron")
-def run_cron_pipeline(authorization: str = Header(None)):
+def run_cron_pipeline(
+    background_tasks: BackgroundTasks,
+    authorization: str = Header(None),
+):
     """cron専用エンドポイント（GitHub Actions等から呼び出し）"""
     # トークン認証
     if not Config.CRON_SECRET:
@@ -149,36 +174,11 @@ def run_cron_pipeline(authorization: str = Header(None)):
     if token != Config.CRON_SECRET:
         raise HTTPException(status_code=403, detail="Invalid token")
 
-    # パイプライン実行（同期）
-    logger.info("Cron pipeline started")
-    try:
-        from core.gmail_client import get_gmail_service
-        from core.batch_processor import run_full_pipeline
+    # バックグラウンドで実行（即座にレスポンスを返す）
+    logger.info("Cron pipeline started (background)")
+    background_tasks.add_task(_run_cron_pipeline_bg)
 
-        service = get_gmail_service()
-        if not service:
-            raise HTTPException(status_code=500, detail="Gmail接続に失敗しました")
-
-        result = run_full_pipeline(gmail_service=service)
-
-        logger.info(
-            "Cron pipeline completed: fetched=%d processed=%d listings=%d errors=%d",
-            result.emails_fetched, result.emails_processed,
-            result.listings_created, result.api_errors,
-        )
-
-        return {
-            "status": result.status,
-            "emails_fetched": result.emails_fetched,
-            "emails_processed": result.emails_processed,
-            "listings_created": result.listings_created,
-            "api_errors": result.api_errors,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Cron pipeline failed")
-        raise HTTPException(status_code=500, detail=str(e))
+    return {"status": "started", "message": "Pipeline started in background"}
 
 
 @router.get("/progress/{job_id}")
