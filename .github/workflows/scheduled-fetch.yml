@@ -1,0 +1,54 @@
+name: Scheduled Email Fetch
+
+on:
+  schedule:
+    # JST 9:00, 12:00, 15:00, 18:00, 21:00
+    - cron: '0 0,3,6,9,12 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  fetch-emails:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Wake up Render server
+        run: |
+          echo "Waking up Render server..."
+          curl -sf -o /dev/null -w "%{http_code}" \
+            https://gmail-analyzer-api.onrender.com/api/fetch/status \
+            || true
+          echo ""
+          echo "Waiting 60s for server to be ready..."
+          sleep 60
+
+      - name: Run cron pipeline
+        run: |
+          echo "Calling cron endpoint..."
+          RESPONSE=$(curl -sf -w "\n%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            --max-time 600 \
+            https://gmail-analyzer-api.onrender.com/api/fetch/cron)
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response: $BODY"
+
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "::error::Cron pipeline failed with status $HTTP_CODE"
+            exit 1
+          fi
+
+          echo "--- Results ---"
+          echo "$BODY" | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          print(f\"Status:           {data.get('status', 'unknown')}\")
+          print(f\"Emails fetched:   {data.get('emails_fetched', 0)}\")
+          print(f\"Emails processed: {data.get('emails_processed', 0)}\")
+          print(f\"Listings created: {data.get('listings_created', 0)}\")
+          print(f\"API errors:       {data.get('api_errors', 0)}\")
+          "

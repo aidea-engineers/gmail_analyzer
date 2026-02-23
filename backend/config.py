@@ -45,3 +45,5 @@ class Config:
 
     GMAIL_TOKEN_JSON: str = os.getenv("GMAIL_TOKEN_JSON", "")
     GMAIL_CREDENTIALS_JSON: str = os.getenv("GMAIL_CREDENTIALS_JSON", "")
+
+    CRON_SECRET: str = os.getenv("CRON_SECRET", "")
