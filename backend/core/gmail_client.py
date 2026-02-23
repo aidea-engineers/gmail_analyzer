@@ -47,9 +47,22 @@ def _load_credentials_from_file():
 
 
 def is_authenticated() -> bool:
-    """Gmail OAuth トークンが有効か確認する"""
+    """Gmail OAuth トークンが有効か確認する（期限切れならリフレッシュを試みる）"""
+    from google.auth.transport.requests import Request
+
     creds = _load_credentials_from_env() or _load_credentials_from_file()
-    return creds is not None and creds.valid
+    if creds is None:
+        return False
+    if creds.valid:
+        return True
+    if creds.expired and creds.refresh_token:
+        try:
+            creds.refresh(Request())
+            return creds.valid
+        except Exception as e:
+            logger.warning(f"トークンリフレッシュ失敗: {e}")
+            return False
+    return False
 
 
 def get_gmail_service():
