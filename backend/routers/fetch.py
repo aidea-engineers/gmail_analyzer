@@ -136,22 +136,36 @@ def start_ai_only(background_tasks: BackgroundTasks):
 
 
 def _run_cron_pipeline_bg():
-    """cronパイプラインをバックグラウンドで実行する"""
+    """cronパイプラインをバックグラウンドで実行する（未処理が0になるまでループ）"""
     try:
         from core.gmail_client import get_gmail_service
-        from core.batch_processor import run_full_pipeline
+        from core.batch_processor import run_full_pipeline, run_extraction_only
 
         service = get_gmail_service()
         if not service:
             logger.error("Cron pipeline: Gmail接続に失敗しました")
             return
 
+        # Phase 1: メール取得 + 初回AI解析（200件まで）
         result = run_full_pipeline(gmail_service=service)
+        total_fetched = result.emails_fetched
+        total_processed = result.emails_processed
+        total_listings = result.listings_created
+        total_errors = result.api_errors
+
+        # Phase 2: 未処理が残っている場合はループで全件処理
+        batch_num = 1
+        while result.emails_processed > 0:
+            batch_num += 1
+            logger.info("Cron pipeline: extraction batch %d starting", batch_num)
+            result = run_extraction_only()
+            total_processed += result.emails_processed
+            total_listings += result.listings_created
+            total_errors += result.api_errors
 
         logger.info(
-            "Cron pipeline completed: fetched=%d processed=%d listings=%d errors=%d",
-            result.emails_fetched, result.emails_processed,
-            result.listings_created, result.api_errors,
+            "Cron pipeline completed: fetched=%d processed=%d listings=%d errors=%d batches=%d",
+            total_fetched, total_processed, total_listings, total_errors, batch_num,
         )
     except Exception:
         logger.exception("Cron pipeline failed")
