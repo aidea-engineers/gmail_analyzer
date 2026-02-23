@@ -216,6 +216,37 @@ def generate_and_insert(count: int = 150) -> int:
     return inserted
 
 
+def clear_mock_data() -> int:
+    """モックデータのみ削除する。削除件数を返す。"""
+    with get_connection() as conn:
+        # モックメールのIDを取得
+        rows = conn.execute(
+            "SELECT id FROM emails WHERE gmail_message_id LIKE 'mock_%'"
+        ).fetchall()
+        email_ids = [r["id"] for r in rows]
+        if not email_ids:
+            return 0
+
+        # 関連する job_listings の ID を取得
+        placeholders = ",".join("?" * len(email_ids))
+        listing_rows = conn.execute(
+            f"SELECT id FROM job_listings WHERE email_id IN ({placeholders})",
+            email_ids,
+        ).fetchall()
+        listing_ids = [r["id"] for r in listing_rows]
+
+        # skills → job_listings → emails の順に削除
+        if listing_ids:
+            lp = ",".join("?" * len(listing_ids))
+            conn.execute(f"DELETE FROM skills WHERE listing_id IN ({lp})", listing_ids)
+            conn.execute(f"DELETE FROM job_listings WHERE id IN ({lp})", listing_ids)
+
+        conn.execute(
+            f"DELETE FROM emails WHERE id IN ({placeholders})", email_ids
+        )
+        return len(email_ids)
+
+
 def clear_all_data():
     """全データを削除する"""
     with get_connection() as conn:

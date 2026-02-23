@@ -10,7 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, Query
 from fastapi.responses import StreamingResponse
 
 from core.database import get_connection, get_fetch_logs
-from core.mock_data import generate_and_insert, clear_all_data
+from core.mock_data import generate_and_insert, clear_all_data, clear_mock_data
 from core.gmail_client import is_authenticated
 from config import Config
 
@@ -158,6 +158,12 @@ async def stream_progress(job_id: str):
 def insert_mock_data(count: int = Query(150, ge=10, le=500)):
     inserted = generate_and_insert(count=count)
     return {"inserted": inserted}
+
+
+@router.delete("/mock")
+def delete_mock_data():
+    deleted = clear_mock_data()
+    return {"deleted": deleted, "message": f"モックデータ{deleted}件を削除しました"}
 
 
 @router.delete("/data")
