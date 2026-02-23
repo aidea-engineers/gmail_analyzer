@@ -79,6 +79,7 @@ def search_listings_api(
             "required_skills": skills_parsed,
             "project_details": r.get("project_details", ""),
             "confidence": r.get("confidence", 0),
+            "start_month": r.get("start_month", ""),
             "subject": r.get("subject", ""),
             "sender": r.get("sender", ""),
             "received_at": r.get("received_at", ""),

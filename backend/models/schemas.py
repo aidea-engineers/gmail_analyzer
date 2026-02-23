@@ -27,6 +27,7 @@ class JobListingExtraction(BaseModel):
         None, description="募集職種 (例: バックエンドエンジニア, PMO)"
     )
     confidence: float = Field(0.5, description="抽出の確信度 0.0-1.0")
+    start_month: Optional[str] = Field(None, description="参画開始時期 (例: '2026年4月', '即日')")
     is_job_listing: bool = Field(True, description="このメールがSES案件情報かどうか")
 
 

@@ -248,7 +248,7 @@ export default function SearchPage() {
           <div className="space-y-2">
             {/* テーブルヘッダー */}
             <div
-              className="grid grid-cols-[100px_1fr_120px_120px_100px_60px] gap-2 px-4 py-2 text-xs font-semibold text-slate-500 border-b"
+              className="grid grid-cols-[100px_1fr_120px_120px_100px_80px_60px] gap-2 px-4 py-2 text-xs font-semibold text-slate-500 border-b"
               style={{ borderColor: "var(--border)" }}
             >
               <span>日付</span>
@@ -256,6 +256,7 @@ export default function SearchPage() {
               <span>職種</span>
               <span>エリア</span>
               <span>単価</span>
+              <span>参画月</span>
               <span>確信度</span>
             </div>
 
@@ -263,7 +264,7 @@ export default function SearchPage() {
             {listings.map((item) => (
               <div key={item.id}>
                 <div
-                  className="grid grid-cols-[100px_1fr_120px_120px_100px_60px] gap-2 px-4 py-3 rounded-lg border cursor-pointer hover:bg-slate-50 transition-colors"
+                  className="grid grid-cols-[100px_1fr_120px_120px_100px_80px_60px] gap-2 px-4 py-3 rounded-lg border cursor-pointer hover:bg-slate-50 transition-colors"
                   style={{
                     background: "var(--card-bg)",
                     borderColor: expandedId === item.id ? "var(--primary)" : "var(--border)",
@@ -285,6 +286,9 @@ export default function SearchPage() {
                     {item.work_area}
                   </span>
                   <span className="text-xs font-medium">{item.unit_price}</span>
+                  <span className="text-xs text-slate-600 truncate">
+                    {item.start_month || "-"}
+                  </span>
                   <span className="text-xs text-slate-500">
                     {(item.confidence * 100).toFixed(0)}%
                   </span>
@@ -305,6 +309,7 @@ export default function SearchPage() {
                         <p><span className="font-semibold">職種:</span> {item.job_type}</p>
                         <p><span className="font-semibold">エリア:</span> {item.work_area}</p>
                         <p><span className="font-semibold">単価:</span> {item.unit_price}</p>
+                        <p><span className="font-semibold">参画月:</span> {item.start_month || "未記載"}</p>
                       </div>
                       <div>
                         <p>

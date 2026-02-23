@@ -46,6 +46,7 @@ export interface JobListing {
   required_skills: string[];
   project_details: string;
   confidence: number;
+  start_month: string;
   subject: string;
   sender: string;
   received_at: string;

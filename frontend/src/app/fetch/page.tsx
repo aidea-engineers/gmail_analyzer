@@ -6,8 +6,6 @@ import {
   getFetchLogs,
   startFullPipeline,
   startAIOnly,
-  insertMockData,
-  deleteAllData,
 } from "@/lib/api";
 import ProgressBar from "@/components/ProgressBar";
 import type { FetchStatus, FetchLog, JobProgress } from "@/types";
@@ -19,7 +17,6 @@ export default function FetchPage() {
   const [error, setError] = useState("");
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [resultMessage, setResultMessage] = useState("");
-  const [mockCount, setMockCount] = useState(150);
 
   const refresh = useCallback(() => {
     setLoading(true);
@@ -54,20 +51,6 @@ export default function FetchPage() {
     setResultMessage("");
     const { job_id } = await startAIOnly();
     setActiveJobId(job_id);
-  };
-
-  const handleMock = async () => {
-    setResultMessage("");
-    const { inserted } = await insertMockData(mockCount);
-    setResultMessage(`モックデータ ${inserted}件を投入しました`);
-    refresh();
-  };
-
-  const handleClear = async () => {
-    setResultMessage("");
-    await deleteAllData();
-    setResultMessage("全データを削除しました");
-    refresh();
   };
 
   if (loading && !status) {
@@ -129,44 +112,6 @@ export default function FetchPage() {
             {resultMessage}
           </div>
         )}
-      </div>
-
-      {/* モックデータ */}
-      <div
-        className="rounded-xl p-5 shadow-sm border mb-6"
-        style={{ background: "var(--card-bg)", borderColor: "var(--border)" }}
-      >
-        <h2 className="text-sm font-bold mb-1">モックデータ（プロトタイプ用）</h2>
-        <p className="text-xs text-slate-500 mb-4">Gmail接続前にUIの動作確認ができます</p>
-        <div className="flex items-center gap-3">
-          <label className="text-sm text-slate-600">
-            件数:
-            <input
-              type="number"
-              value={mockCount}
-              onChange={(e) => setMockCount(Number(e.target.value))}
-              min={10}
-              max={500}
-              step={10}
-              className="ml-2 w-20 px-2 py-1 border rounded text-sm"
-              style={{ borderColor: "var(--border)" }}
-            />
-          </label>
-          <button
-            onClick={handleMock}
-            disabled={!!activeJobId}
-            className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
-          >
-            モックデータ投入
-          </button>
-          <button
-            onClick={handleClear}
-            disabled={!!activeJobId}
-            className="px-4 py-2 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600 disabled:opacity-50 transition-colors"
-          >
-            全データ削除
-          </button>
-        </div>
       </div>
 
       {/* データ統計 */}

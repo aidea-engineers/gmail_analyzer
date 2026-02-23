@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS job_listings (
     job_type        TEXT DEFAULT '',
     raw_extraction  TEXT DEFAULT '',
     confidence      REAL DEFAULT 0.0,
+    start_month     TEXT DEFAULT '',
     created_at      TIMESTAMP DEFAULT NOW()
 );
 
@@ -181,6 +182,7 @@ CREATE TABLE IF NOT EXISTS job_listings (
     job_type        TEXT DEFAULT '',
     raw_extraction  TEXT DEFAULT '',
     confidence      REAL DEFAULT 0.0,
+    start_month     TEXT DEFAULT '',
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (email_id) REFERENCES emails(id)
 );
@@ -222,6 +224,14 @@ CREATE TABLE IF NOT EXISTS fetch_log (
 def init_db():
     with get_connection() as conn:
         conn.executescript(_PG_SCHEMA if conn.is_pg else _SQLITE_SCHEMA)
+        # マイグレーション: start_month カラム追加
+        try:
+            conn.execute(
+                "ALTER TABLE job_listings ADD COLUMN start_month TEXT DEFAULT ''"
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()  # カラムが既に存在する場合は無視
 
 
 # --- Email CRUD ---
@@ -286,8 +296,8 @@ def insert_job_listing(email_id: int, extraction: dict) -> int:
         sql = """INSERT INTO job_listings
                  (email_id, company_name, work_area, unit_price,
                   unit_price_min, unit_price_max, required_skills,
-                  project_details, job_type, raw_extraction, confidence)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                  project_details, job_type, raw_extraction, confidence, start_month)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
         params = (
             email_id,
             extraction.get("company_name", ""),
@@ -300,6 +310,7 @@ def insert_job_listing(email_id: int, extraction: dict) -> int:
             extraction.get("job_type", ""),
             raw_json,
             extraction.get("confidence", 0.0),
+            extraction.get("start_month", ""),
         )
 
         if conn.is_pg:
