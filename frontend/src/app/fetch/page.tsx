@@ -43,14 +43,22 @@ export default function FetchPage() {
 
   const handleFullPipeline = async () => {
     setResultMessage("");
-    const { job_id } = await startFullPipeline();
-    setActiveJobId(job_id);
+    try {
+      const { job_id } = await startFullPipeline();
+      setActiveJobId(job_id);
+    } catch (e: unknown) {
+      setResultMessage(`エラー: ${e instanceof Error ? e.message : "不明なエラー"}`);
+    }
   };
 
   const handleAIOnly = async () => {
     setResultMessage("");
-    const { job_id } = await startAIOnly();
-    setActiveJobId(job_id);
+    try {
+      const { job_id } = await startAIOnly();
+      setActiveJobId(job_id);
+    } catch (e: unknown) {
+      setResultMessage(`エラー: ${e instanceof Error ? e.message : "不明なエラー"}`);
+    }
   };
 
   if (loading && !status) {
@@ -108,7 +116,11 @@ export default function FetchPage() {
         {activeJobId && <ProgressBar jobId={activeJobId} onComplete={handleComplete} />}
 
         {resultMessage && !activeJobId && (
-          <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm">
+          <div className={`mt-3 p-3 border rounded-lg text-sm ${
+            resultMessage.startsWith("エラー")
+              ? "bg-red-50 border-red-200 text-red-700"
+              : "bg-blue-50 border-blue-200 text-blue-700"
+          }`}>
             {resultMessage}
           </div>
         )}

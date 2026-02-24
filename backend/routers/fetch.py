@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 import uuid
 from typing import Optional
 
@@ -22,6 +23,10 @@ router = APIRouter(prefix="/api/fetch", tags=["fetch"])
 
 # 進行中ジョブの進捗を保持
 _job_progress: dict[str, dict] = {}
+
+# 重複実行防止用ロック
+_pipeline_lock = threading.Lock()
+_running_job_id: Optional[str] = None
 
 
 @router.get("/status")
@@ -56,7 +61,9 @@ def fetch_logs(limit: int = Query(10, ge=1, le=100)):
 
 
 def _run_pipeline(job_id: str, mode: str):
-    """バックグラウンドでパイプラインを実行する"""
+    """バックグラウンドでパイプラインを実行する（排他制御付き）"""
+    global _running_job_id
+
     def progress_cb(status: dict):
         _job_progress[job_id] = {
             "phase": status.get("phase", ""),
@@ -107,11 +114,23 @@ def _run_pipeline(job_id: str, mode: str):
             "message": f"エラー: {str(e)}",
             "done": True,
         }
+    finally:
+        with _pipeline_lock:
+            _running_job_id = None
 
 
 @router.post("/full-pipeline")
 def start_full_pipeline(background_tasks: BackgroundTasks):
-    job_id = uuid.uuid4().hex[:12]
+    global _running_job_id
+    with _pipeline_lock:
+        if _running_job_id is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=f"別のジョブが実行中です (job_id: {_running_job_id})",
+            )
+        job_id = uuid.uuid4().hex[:12]
+        _running_job_id = job_id
+
     _job_progress[job_id] = {
         "phase": "starting",
         "current": 0,
@@ -124,7 +143,16 @@ def start_full_pipeline(background_tasks: BackgroundTasks):
 
 @router.post("/ai-only")
 def start_ai_only(background_tasks: BackgroundTasks):
-    job_id = uuid.uuid4().hex[:12]
+    global _running_job_id
+    with _pipeline_lock:
+        if _running_job_id is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=f"別のジョブが実行中です (job_id: {_running_job_id})",
+            )
+        job_id = uuid.uuid4().hex[:12]
+        _running_job_id = job_id
+
     _job_progress[job_id] = {
         "phase": "starting",
         "current": 0,
@@ -137,6 +165,7 @@ def start_ai_only(background_tasks: BackgroundTasks):
 
 def _run_cron_pipeline_bg():
     """cronパイプラインをバックグラウンドで実行する（未処理が0になるまでループ）"""
+    global _running_job_id
     try:
         from core.gmail_client import get_gmail_service
         from core.batch_processor import run_full_pipeline, run_extraction_only
@@ -169,6 +198,9 @@ def _run_cron_pipeline_bg():
         )
     except Exception:
         logger.exception("Cron pipeline failed")
+    finally:
+        with _pipeline_lock:
+            _running_job_id = None
 
 
 @router.post("/cron")
@@ -187,6 +219,14 @@ def run_cron_pipeline(
     token = authorization[len("Bearer "):]
     if token != Config.CRON_SECRET:
         raise HTTPException(status_code=403, detail="Invalid token")
+
+    # 重複実行チェック
+    global _running_job_id
+    with _pipeline_lock:
+        if _running_job_id is not None:
+            logger.warning("Cron pipeline skipped: another job is running (%s)", _running_job_id)
+            return {"status": "skipped", "message": f"別のジョブが実行中のためスキップ (job_id: {_running_job_id})"}
+        _running_job_id = f"cron-{uuid.uuid4().hex[:8]}"
 
     # バックグラウンドで実行（即座にレスポンスを返す）
     logger.info("Cron pipeline started (background)")

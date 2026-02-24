@@ -618,3 +618,35 @@ def get_fetch_logs(limit: int = 10) -> list[dict]:
             "SELECT * FROM fetch_log ORDER BY id DESC LIMIT ?", (limit,)
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def cleanup_stale_fetch_logs(stale_minutes: int = 10) -> int:
+    """'running' のまま放置されたfetch_logを 'failed (stale)' に更新する"""
+    with get_connection() as conn:
+        if conn.is_pg:
+            cursor = conn.execute(
+                """UPDATE fetch_log
+                   SET status = ?, finished_at = CURRENT_TIMESTAMP,
+                       errors = ?
+                   WHERE status = 'running'
+                     AND started_at < NOW() - INTERVAL '1 minute' * ?""",
+                (
+                    "failed (stale)",
+                    json.dumps(["サーバー再起動等により処理が中断されました"]),
+                    stale_minutes,
+                ),
+            )
+        else:
+            cursor = conn.execute(
+                """UPDATE fetch_log
+                   SET status = ?, finished_at = CURRENT_TIMESTAMP,
+                       errors = ?
+                   WHERE status = 'running'
+                     AND started_at < datetime('now', ? || ' minutes')""",
+                (
+                    "failed (stale)",
+                    json.dumps(["サーバー再起動等により処理が中断されました"]),
+                    f"-{stale_minutes}",
+                ),
+            )
+        return cursor.rowcount

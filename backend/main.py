@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import Config
-from core.database import init_db
+from core.database import init_db, cleanup_stale_fetch_logs
 from routers import dashboard, search, fetch, settings
 
 app = FastAPI(
@@ -33,6 +33,10 @@ app.include_router(settings.router)
 @app.on_event("startup")
 def startup():
     init_db()
+    cleaned = cleanup_stale_fetch_logs()
+    if cleaned:
+        import logging
+        logging.getLogger(__name__).info("Stale fetch logs cleaned up: %d entries", cleaned)
 
 
 @app.get("/api/health")

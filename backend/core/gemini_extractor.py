@@ -45,8 +45,11 @@ EXTRACTION_PROMPT = """あなたはSES（システムエンジニアリングサ
 
 
 def _get_client() -> genai.Client:
-    """Gemini APIクライアントを取得"""
-    return genai.Client(api_key=Config.GEMINI_API_KEY)
+    """Gemini APIクライアントを取得（60秒タイムアウト付き）"""
+    return genai.Client(
+        api_key=Config.GEMINI_API_KEY,
+        http_options={"timeout": 60_000},
+    )
 
 
 def extract_from_email(
