@@ -10,6 +10,12 @@ import {
 import ProgressBar from "@/components/ProgressBar";
 import type { FetchStatus, FetchLog, JobProgress } from "@/types";
 
+function toJST(utc: string | null | undefined): string {
+  if (!utc) return "-";
+  const d = new Date(utc.endsWith("Z") ? utc : utc + "Z");
+  return d.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", hour12: false });
+}
+
 export default function FetchPage() {
   const [status, setStatus] = useState<FetchStatus | null>(null);
   const [logs, setLogs] = useState<FetchLog[]>([]);
@@ -175,8 +181,8 @@ export default function FetchPage() {
               <tbody>
                 {logs.map((log) => (
                   <tr key={log.id} className="border-b" style={{ borderColor: "var(--border)" }}>
-                    <td className="py-2 pr-4 text-xs">{log.started_at?.slice(0, 19)?.replace("T", " ")}</td>
-                    <td className="py-2 pr-4 text-xs">{log.finished_at?.slice(0, 19)?.replace("T", " ") ?? "-"}</td>
+                    <td className="py-2 pr-4 text-xs">{toJST(log.started_at)}</td>
+                    <td className="py-2 pr-4 text-xs">{toJST(log.finished_at)}</td>
                     <td className="py-2 pr-4">{log.emails_fetched}</td>
                     <td className="py-2 pr-4">{log.emails_processed}</td>
                     <td className="py-2">
