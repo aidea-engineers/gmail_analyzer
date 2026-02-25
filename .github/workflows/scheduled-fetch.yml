@@ -9,7 +9,7 @@ on:
 jobs:
   fetch-emails:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 25
     steps:
       - name: Wake up Render server
         run: |
@@ -40,4 +40,52 @@ jobs:
             exit 1
           fi
 
-          echo "Pipeline triggered successfully. Processing continues in background on Render."
+          echo "Pipeline triggered successfully."
+
+      - name: Keep Render alive during processing
+        run: |
+          echo "Keeping Render alive while pipeline processes..."
+          MAX_WAIT=1200  # 最大20分待機
+          INTERVAL=30    # 30秒ごとにping
+          ELAPSED=0
+          PREV_UNPROCESSED=999999
+
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+
+            # ステータスをチェック（ping兼用でRenderを起こし続ける）
+            STATUS=$(curl -sf --max-time 10 \
+              https://gmail-analyzer-api.onrender.com/api/fetch/status 2>/dev/null || echo "")
+
+            if [ -z "$STATUS" ]; then
+              echo "[$ELAPSED s] Server not responding, retrying..."
+              continue
+            fi
+
+            UNPROCESSED=$(echo "$STATUS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('unprocessed_emails',0))" 2>/dev/null || echo "?")
+            TOTAL=$(echo "$STATUS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('total_listings',0))" 2>/dev/null || echo "?")
+
+            echo "[$ELAPSED s] Unprocessed: $UNPROCESSED | Total listings: $TOTAL"
+
+            # 未処理が0になったら完了
+            if [ "$UNPROCESSED" = "0" ]; then
+              echo "All emails processed!"
+              break
+            fi
+
+            # 未処理数が変わらなくなったら（3回連続同じ = 90秒間変化なし）パイプラインが停止した可能性
+            if [ "$UNPROCESSED" = "$PREV_UNPROCESSED" ] && [ $ELAPSED -gt 300 ]; then
+              STALL_COUNT=$((${STALL_COUNT:-0} + 1))
+              if [ $STALL_COUNT -ge 3 ]; then
+                echo "::warning::Processing appears stalled (no change for 90s). Ending wait."
+                break
+              fi
+            else
+              STALL_COUNT=0
+            fi
+
+            PREV_UNPROCESSED=$UNPROCESSED
+          done
+
+          echo "Keep-alive loop finished after ${ELAPSED}s."
