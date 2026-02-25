@@ -84,10 +84,10 @@ export default function SearchPage() {
   };
 
   return (
-    <div className="flex gap-6">
+    <div className="flex gap-6 h-[calc(100vh-3.5rem)]">
       {/* サイドバーフィルター */}
       <div
-        className="w-64 shrink-0 rounded-xl p-4 shadow-sm border self-start sticky top-6"
+        className="w-64 shrink-0 rounded-xl p-4 shadow-sm border overflow-y-auto"
         style={{ background: "var(--card-bg)", borderColor: "var(--border)" }}
       >
         <div className="flex items-center justify-between mb-4">
@@ -216,7 +216,7 @@ export default function SearchPage() {
       </div>
 
       {/* メインコンテンツ */}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-xl font-bold">案件検索</h1>
           <div className="flex items-center gap-3">
@@ -330,6 +330,14 @@ export default function SearchPage() {
                       <span className="font-semibold">案件内容:</span>{" "}
                       {item.project_details}
                     </p>
+                    {item.requirements && (
+                      <div className="mt-3 p-3 rounded-lg" style={{ background: "#eef2ff", border: "1px solid #c7d2fe" }}>
+                        <p className="text-sm">
+                          <span className="font-semibold text-indigo-700">必須要件・求める人物像:</span>
+                        </p>
+                        <p className="text-sm mt-1 whitespace-pre-wrap">{item.requirements}</p>
+                      </div>
+                    )}
                     {item.subject && (
                       <p className="text-xs text-slate-400 mt-2">
                         メール件名: {item.subject}

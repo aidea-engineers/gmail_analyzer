@@ -78,6 +78,7 @@ def search_listings_api(
             "unit_price_max": r.get("unit_price_max"),
             "required_skills": skills_parsed,
             "project_details": r.get("project_details", ""),
+            "requirements": r.get("requirements", ""),
             "confidence": r.get("confidence", 0),
             "start_month": r.get("start_month", ""),
             "subject": r.get("subject", ""),
@@ -119,7 +120,7 @@ def export_csv(
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["日付", "会社名", "職種", "エリア", "単価", "スキル", "案件内容", "確信度"])
+    writer.writerow(["日付", "会社名", "職種", "エリア", "単価", "スキル", "案件内容", "必須要件・求める人物像", "確信度"])
 
     for r in results:
         skills_raw = r.get("required_skills", "[]")
@@ -139,6 +140,7 @@ def export_csv(
             r.get("unit_price", ""),
             ", ".join(skills_parsed) if isinstance(skills_parsed, list) else str(skills_parsed),
             r.get("project_details", ""),
+            r.get("requirements", ""),
             f'{r.get("confidence", 0):.0%}',
         ])
 

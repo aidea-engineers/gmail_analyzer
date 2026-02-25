@@ -232,6 +232,14 @@ def init_db():
             conn.commit()
         except Exception:
             conn.rollback()  # カラムが既に存在する場合は無視
+        # マイグレーション: requirements カラム追加
+        try:
+            conn.execute(
+                "ALTER TABLE job_listings ADD COLUMN requirements TEXT DEFAULT ''"
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()  # カラムが既に存在する場合は無視
 
 
 # --- Email CRUD ---
@@ -364,8 +372,8 @@ def insert_job_listing(email_id: int, extraction: dict) -> Optional[int]:
         sql = """INSERT INTO job_listings
                  (email_id, company_name, work_area, unit_price,
                   unit_price_min, unit_price_max, required_skills,
-                  project_details, job_type, raw_extraction, confidence, start_month)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                  project_details, job_type, raw_extraction, confidence, start_month, requirements)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
         params = (
             email_id,
             company_name,
@@ -379,6 +387,7 @@ def insert_job_listing(email_id: int, extraction: dict) -> Optional[int]:
             raw_json,
             extraction.get("confidence", 0.0),
             extraction.get("start_month") or "",
+            extraction.get("requirements") or "",
         )
 
         if conn.is_pg:
@@ -424,10 +433,10 @@ def search_listings(
             query += """ AND (
                 jl.company_name LIKE ? OR jl.work_area LIKE ?
                 OR jl.project_details LIKE ? OR jl.required_skills LIKE ?
-                OR e.subject LIKE ?
+                OR jl.requirements LIKE ? OR e.subject LIKE ?
             )"""
             like = f"%{keyword.strip()}%"
-            params.extend([like] * 5)
+            params.extend([like] * 6)
         else:
             # 複数キーワード（AND/OR切替）
             connector = " AND " if keyword_mode == "and" else " OR "
@@ -436,10 +445,10 @@ def search_listings(
                 kw_clauses.append("""(
                     jl.company_name LIKE ? OR jl.work_area LIKE ?
                     OR jl.project_details LIKE ? OR jl.required_skills LIKE ?
-                    OR e.subject LIKE ?
+                    OR jl.requirements LIKE ? OR e.subject LIKE ?
                 )""")
                 like = f"%{kw}%"
-                params.extend([like] * 5)
+                params.extend([like] * 6)
             query += f" AND ({connector.join(kw_clauses)})"
 
     if skills:

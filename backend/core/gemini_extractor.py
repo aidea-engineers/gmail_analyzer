@@ -35,10 +35,11 @@ EXTRACTION_PROMPT = """あなたはSES（システムエンジニアリングサ
 案件でない場合はis_job_listing=falseの要素を1つだけ返してください。
 
 ## company_name（会社名）
-メール送信者の企業名を最優先で記載すること。
-送信者名「{sender}」に会社名が含まれていればそれを使用する。
-本文中に明記された発注元・クライアント企業名がある場合はそちらを優先してもよい。
-**必ず何らかの企業名を記載すること。**
+**メール送信者の企業名のみを記載すること。**
+送信者名「{sender}」から企業名を抽出して使用する。
+本文中に記載された案件先・クライアント企業名は使用しないこと（それはproject_detailsに含める）。
+「○○サービス運営企業」のような案件先の説明をcompany_nameに入れてはいけない。
+**必ず送信者の企業名を記載すること。**
 
 ## work_area（エリア/勤務地）
 以下のカテゴリから最も適切なものを選択すること（駅名や住所ではなく大分類で記載）:
@@ -65,6 +66,7 @@ EXTRACTION_PROMPT = """あなたはSES（システムエンジニアリングサ
 - unit_price_max: 万円単位の整数の上限（例: 65）。単一数値ならmin=max。不明ならnull
 - required_skills: 言語・フレームワーク・ツール名を個別にリスト化。正式名称で記載
 - project_details: 業務内容・要件を簡潔に要約（100文字以内）
+- requirements: 必須要件・求める人物像を記載。メール本文に必須スキル・経験年数・資格・求める人物像が明記されていればそのまま抽出する。明記されていない場合は、業務内容から「このような経験・スキルが必要」と推測して記載する（200文字以内）
 - job_type: 募集職種名（例: バックエンドエンジニア, PM, SE）
 - confidence: 情報の確実性（0.0-1.0）。明確に記載があれば高く、推測が多ければ低く
 - start_month: 参画開始時期（例: "2026年4月", "即日"）。記載なしならnull
@@ -124,7 +126,7 @@ def extract_from_email(
 
             result = EmailExtractionResult.model_validate_json(response.text)
 
-            # 後処理: スキル正規化 + エリア正規化 + 社名フォールバック
+            # 後処理: スキル正規化 + エリア正規化 + 社名を常にsenderから設定
             sender_company = extract_company_from_sender(sender)
             for listing in result.listings:
                 listing.required_skills = [
@@ -132,7 +134,8 @@ def extract_from_email(
                 ]
                 if listing.work_area:
                     listing.work_area = normalize_area(listing.work_area)
-                if not listing.company_name and sender_company:
+                # 会社名は常にsenderの企業名を使用（Geminiが案件先名を入れる問題を防止）
+                if sender_company:
                     listing.company_name = sender_company
 
             return result.listings

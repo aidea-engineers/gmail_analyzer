@@ -45,6 +45,7 @@ export interface JobListing {
   unit_price_max: number | null;
   required_skills: string[];
   project_details: string;
+  requirements: string;
   confidence: number;
   start_month: string;
   subject: string;

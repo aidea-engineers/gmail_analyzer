@@ -23,6 +23,7 @@ class JobListingExtraction(BaseModel):
         description="必要スキル・言語のリスト (例: ['Java', 'Spring Boot', 'AWS'])",
     )
     project_details: Optional[str] = Field(None, description="案件内容・要件の要約")
+    requirements: Optional[str] = Field(None, description="必須要件・求める人物像")
     job_type: Optional[str] = Field(
         None, description="募集職種 (例: バックエンドエンジニア, PMO)"
     )
