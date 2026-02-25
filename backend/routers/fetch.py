@@ -282,7 +282,13 @@ def reanalyze_old_listings(
     cutoff: str = Query("2026-02-25T04:20:00", description="この日時より前の案件を再解析"),
 ):
     """旧フォーマットの案件を削除して再解析対象にする"""
-    # 認証は一時的にバイパス（再解析完了後に復元する）
+    if not Config.CRON_SECRET:
+        raise HTTPException(status_code=500, detail="CRON_SECRET is not configured")
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+    token = authorization[len("Bearer "):]
+    if token != Config.CRON_SECRET:
+        raise HTTPException(status_code=403, detail="Invalid token")
 
     with get_connection() as conn:
         # 旧案件のemail_idを取得
