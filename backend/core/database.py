@@ -287,7 +287,75 @@ def mark_email_processed(email_id: int):
 
 # --- Job Listing CRUD ---
 
-def insert_job_listing(email_id: int, extraction: dict) -> int:
+def check_duplicate_listing(
+    company_name: str, work_area: str, unit_price: str, project_details: str,
+    days: int = 14,
+) -> bool:
+    """同一案件が既に登録済みかチェックする（重複検出）"""
+    if not company_name and not project_details:
+        return False
+
+    with get_connection() as conn:
+        if conn.is_pg:
+            date_condition = "AND jl.created_at > NOW() - INTERVAL '%s days'" % days
+        else:
+            date_condition = f"AND jl.created_at > datetime('now', '-{days} days')"
+
+        conditions = ["1=1", date_condition]
+        params = []
+
+        if company_name:
+            conditions.append("jl.company_name = ?")
+            params.append(company_name)
+
+        if unit_price:
+            conditions.append("jl.unit_price = ?")
+            params.append(unit_price)
+
+        if work_area:
+            conditions.append("jl.work_area = ?")
+            params.append(work_area)
+
+        where = " AND ".join(conditions)
+        sql = f"""SELECT COUNT(*) as cnt FROM job_listings jl WHERE {where}"""
+        row = conn.execute(sql, params).fetchone()
+        count = row["cnt"]
+
+        if count == 0:
+            return False
+
+        # company + price + area が一致するものが存在する場合、
+        # project_details も類似しているか確認
+        if project_details:
+            sql2 = f"""SELECT project_details FROM job_listings jl WHERE {where}"""
+            rows = conn.execute(sql2, params).fetchall()
+            for r in rows:
+                existing = r["project_details"] or ""
+                # 短い方が長い方に含まれているか、または30文字以上一致するかチェック
+                if existing and project_details:
+                    shorter = min(existing, project_details, key=len)
+                    longer = max(existing, project_details, key=len)
+                    if shorter in longer:
+                        return True
+                    # 先頭30文字が一致すれば重複とみなす
+                    if len(shorter) >= 30 and shorter[:30] == project_details[:30]:
+                        return True
+            return False
+
+        return count > 0
+
+
+def insert_job_listing(email_id: int, extraction: dict) -> Optional[int]:
+    """案件をDBに挿入する。重複時はNoneを返す。"""
+    company_name = extraction.get("company_name") or ""
+    work_area = extraction.get("work_area") or ""
+    unit_price = extraction.get("unit_price") or ""
+    project_details = extraction.get("project_details") or ""
+
+    # 重複チェック
+    if check_duplicate_listing(company_name, work_area, unit_price, project_details):
+        return None
+
     skills_list = extraction.get("required_skills", [])
     skills_json = json.dumps(skills_list, ensure_ascii=False)
     raw_json = json.dumps(extraction, ensure_ascii=False, default=str)
@@ -300,17 +368,17 @@ def insert_job_listing(email_id: int, extraction: dict) -> int:
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
         params = (
             email_id,
-            extraction.get("company_name", ""),
-            extraction.get("work_area", ""),
-            extraction.get("unit_price", ""),
+            company_name,
+            work_area,
+            unit_price,
             extraction.get("unit_price_min"),
             extraction.get("unit_price_max"),
             skills_json,
-            extraction.get("project_details", ""),
-            extraction.get("job_type", ""),
+            project_details,
+            extraction.get("job_type") or "",
             raw_json,
             extraction.get("confidence", 0.0),
-            extraction.get("start_month", ""),
+            extraction.get("start_month") or "",
         )
 
         if conn.is_pg:

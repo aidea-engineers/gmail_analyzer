@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Optional, Callable
 
 from core.database import (
@@ -50,23 +51,33 @@ def run_extraction_only(
             email_id = email["id"]
             subject = email.get("subject", "")
             body = email.get("body_text", "")
+            sender = email.get("sender", "")
 
             try:
-                extraction = extract_from_email(subject, body)
+                extractions = extract_from_email(subject, body, sender)
 
-                if extraction is None:
+                if extractions is None:
                     # API失敗時は未処理のまま残す（次回再試行可能）
                     result.api_errors += 1
                     error_msg = f"メールID {email_id}: AI解析失敗（API エラー）"
                     logger.warning(error_msg)
                     errors.append(error_msg)
-                elif extraction.is_job_listing:
-                    insert_job_listing(email_id, extraction.model_dump())
-                    result.listings_created += 1
-                    mark_email_processed(email_id)
-                    result.emails_processed += 1
                 else:
-                    # 案件ではないメール → 処理済みにする
+                    has_listing = False
+                    for extraction in extractions:
+                        if extraction.is_job_listing:
+                            listing_id = insert_job_listing(
+                                email_id, extraction.model_dump()
+                            )
+                            if listing_id is not None:
+                                result.listings_created += 1
+                            else:
+                                logger.info(
+                                    f"メールID {email_id}: 重複案件スキップ"
+                                )
+                            has_listing = True
+
+                    # 案件の有無にかかわらず処理済みにする
                     mark_email_processed(email_id)
                     result.emails_processed += 1
 
@@ -85,6 +96,10 @@ def run_extraction_only(
                         + (f", 失敗: {result.api_errors}件)" if result.api_errors > 0 else ")"),
                     }
                 )
+
+            # レート制限対策
+            if i < total - 1:
+                time.sleep(Config.GEMINI_DELAY_SECONDS)
 
         result.status = "completed"
         result.errors = errors

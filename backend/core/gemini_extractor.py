@@ -9,32 +9,68 @@ from google import genai
 from google.genai import types
 
 from config import Config
-from models.schemas import JobListingExtraction
-from utils.text_helpers import clean_email_body, truncate_for_gemini, normalize_skill_name
+from models.schemas import JobListingExtraction, EmailExtractionResult
+from utils.text_helpers import (
+    clean_email_body,
+    truncate_for_gemini,
+    normalize_skill_name,
+    normalize_area,
+    extract_company_from_sender,
+)
 
 logger = logging.getLogger(__name__)
 
 EXTRACTION_PROMPT = """あなたはSES（システムエンジニアリングサービス）の案件情報を抽出する専門AIです。
 
 以下のメールから案件情報を正確に抽出してください。
+**1通のメールに複数案件が含まれる場合は、すべて個別に抽出してlistingsに格納してください。**
 
-## 抽出ルール:
-1. company_name（会社名）: メール送信元や本文中の企業名。不明な場合はnull
-2. work_area（エリア/勤務地）: 具体的な場所。「リモート」「フルリモート」も含む。複数ある場合はカンマ区切り
-3. unit_price（単価）: 原文のまま抽出（例: "55-65万", "〜80万円/月"）
-4. unit_price_min: 数値の下限を万円単位の整数で（例: 55）。不明ならnull
-5. unit_price_max: 数値の上限を万円単位の整数で（例: 65）。単一の数値の場合はmin=maxとする。不明ならnull
-6. required_skills: プログラミング言語、フレームワーク、ツール名を個別にリスト化。正式名称で記載
-7. project_details: 業務内容・要件を簡潔に要約（100文字以内）
-8. job_type: 募集職種名を抽出（例: バックエンドエンジニア, PM, SE）
-9. confidence: 情報の確実性（0.0-1.0）。明確に記載があれば高く、推測が多ければ低く
-10. start_month: 参画開始時期（例: "2026年4月", "即日", "2026年3月～"）。記載なしならnull
-11. is_job_listing: 以下の条件で判定する
-    - true: エンジニアを募集しているSES案件情報（プロジェクトに人を探している）
-    - false: 以下のようなメールは必ずfalseにすること
-      - 人材紹介・要員提案メール（「弊社エンジニアをご紹介」「○○さんをご提案」等、人を売り込んでいるメール）
-      - 営業メール、広告、ニュースレター
-      - 案件情報が含まれないメール
+## is_job_listing（案件判定）
+各案件について以下の条件で判定する:
+- true: エンジニアを募集しているSES案件情報（プロジェクトに人を探している）
+- false: 以下のようなメールは必ずfalseにすること
+  - 人材紹介・要員提案メール（「弊社エンジニアをご紹介」「○○さんをご提案」等、人を売り込んでいるメール）
+  - 営業メール、広告、ニュースレター
+  - 案件情報が含まれないメール
+案件でない場合はis_job_listing=falseの要素を1つだけ返してください。
+
+## company_name（会社名）
+メール送信者の企業名を最優先で記載すること。
+送信者名「{sender}」に会社名が含まれていればそれを使用する。
+本文中に明記された発注元・クライアント企業名がある場合はそちらを優先してもよい。
+**必ず何らかの企業名を記載すること。**
+
+## work_area（エリア/勤務地）
+以下のカテゴリから最も適切なものを選択すること（駅名や住所ではなく大分類で記載）:
+- 東京23区
+- 埼玉
+- 千葉
+- 神奈川
+- 大阪
+- 大阪近郊（京都・奈良・兵庫）
+- 名古屋
+- 愛知（名古屋除く）
+- 福岡
+- フルリモート
+- その他（具体的な地域名を記載）
+
+リモートワークがある場合の記載ルール:
+- 完全リモート/フルリモート → 「フルリモート」
+- リモート併用（出社あり） → 「リモート（東京23区）」のように「リモート（エリア名）」形式
+- 複数エリアの場合はカンマ区切り（例: 「東京23区, 大阪」）
+
+## その他のフィールド
+- unit_price: 原文のまま（例: "55-65万", "〜80万円/月"）
+- unit_price_min: 万円単位の整数の下限（例: 55）。不明ならnull
+- unit_price_max: 万円単位の整数の上限（例: 65）。単一数値ならmin=max。不明ならnull
+- required_skills: 言語・フレームワーク・ツール名を個別にリスト化。正式名称で記載
+- project_details: 業務内容・要件を簡潔に要約（100文字以内）
+- job_type: 募集職種名（例: バックエンドエンジニア, PM, SE）
+- confidence: 情報の確実性（0.0-1.0）。明確に記載があれば高く、推測が多ければ低く
+- start_month: 参画開始時期（例: "2026年4月", "即日"）。記載なしならnull
+
+## メール送信者:
+{sender}
 
 ## メール件名:
 {subject}
@@ -53,9 +89,13 @@ def _get_client() -> genai.Client:
 
 
 def extract_from_email(
-    subject: str, body_text: str
-) -> Optional[JobListingExtraction]:
-    """1件のメールからSES案件情報を抽出する"""
+    subject: str, body_text: str, sender: str = ""
+) -> Optional[list[JobListingExtraction]]:
+    """1件のメールからSES案件情報を抽出する（複数案件対応）
+
+    Returns:
+        案件リスト。APIエラー時はNone。
+    """
     if not Config.GEMINI_API_KEY:
         logger.error("GEMINI_API_KEY が設定されていません")
         return None
@@ -63,7 +103,9 @@ def extract_from_email(
     cleaned_body = clean_email_body(body_text)
     truncated_body = truncate_for_gemini(cleaned_body)
 
-    prompt = EXTRACTION_PROMPT.format(subject=subject, body=truncated_body)
+    prompt = EXTRACTION_PROMPT.format(
+        subject=subject, body=truncated_body, sender=sender
+    )
 
     client = _get_client()
 
@@ -75,19 +117,25 @@ def extract_from_email(
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
-                    response_schema=JobListingExtraction,
+                    response_schema=EmailExtractionResult,
                     temperature=0.1,
                 ),
             )
 
-            result = JobListingExtraction.model_validate_json(response.text)
+            result = EmailExtractionResult.model_validate_json(response.text)
 
-            # スキル名を正規化
-            result.required_skills = [
-                normalize_skill_name(s) for s in result.required_skills
-            ]
+            # 後処理: スキル正規化 + エリア正規化 + 社名フォールバック
+            sender_company = extract_company_from_sender(sender)
+            for listing in result.listings:
+                listing.required_skills = [
+                    normalize_skill_name(s) for s in listing.required_skills
+                ]
+                if listing.work_area:
+                    listing.work_area = normalize_area(listing.work_area)
+                if not listing.company_name and sender_company:
+                    listing.company_name = sender_company
 
-            return result
+            return result.listings
 
         except Exception as e:
             error_str = str(e).lower()
@@ -107,36 +155,3 @@ def extract_from_email(
 
     logger.error("最大リトライ回数に達しました")
     return None
-
-
-def extract_batch(
-    emails: list[dict],
-    progress_callback=None,
-) -> list[tuple[int, Optional[JobListingExtraction]]]:
-    """複数メールをバッチ処理で抽出する"""
-    results = []
-    total = len(emails)
-
-    for i, email in enumerate(emails):
-        email_id = email["id"]
-        subject = email.get("subject", "")
-        body = email.get("body_text", "")
-
-        extraction = extract_from_email(subject, body)
-        results.append((email_id, extraction))
-
-        if progress_callback:
-            progress_callback(
-                {
-                    "phase": "extraction",
-                    "current": i + 1,
-                    "total": total,
-                    "message": f"AI解析中: {i + 1}/{total} メール",
-                }
-            )
-
-        # レート制限対策
-        if i < total - 1:
-            time.sleep(Config.GEMINI_DELAY_SECONDS)
-
-    return results

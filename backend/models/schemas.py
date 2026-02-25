@@ -6,9 +6,9 @@ from datetime import datetime
 
 
 class JobListingExtraction(BaseModel):
-    """Gemini APIからの抽出結果スキーマ"""
+    """Gemini APIからの1案件の抽出結果スキーマ"""
     company_name: Optional[str] = Field(None, description="会社名・企業名")
-    work_area: Optional[str] = Field(None, description="勤務地・エリア (例: 東京都港区, リモート)")
+    work_area: Optional[str] = Field(None, description="勤務地・エリア")
     unit_price: Optional[str] = Field(
         None, description="単価・報酬 (原文のまま, 例: '60-70万', '~80万円/月')"
     )
@@ -29,6 +29,14 @@ class JobListingExtraction(BaseModel):
     confidence: float = Field(0.5, description="抽出の確信度 0.0-1.0")
     start_month: Optional[str] = Field(None, description="参画開始時期 (例: '2026年4月', '即日')")
     is_job_listing: bool = Field(True, description="このメールがSES案件情報かどうか")
+
+
+class EmailExtractionResult(BaseModel):
+    """1通のメールからの抽出結果（複数案件対応）"""
+    listings: list[JobListingExtraction] = Field(
+        default_factory=list,
+        description="メール内の案件リスト。案件がない場合はis_job_listing=falseの要素を1つ返す",
+    )
 
 
 class EmailRecord(BaseModel):
