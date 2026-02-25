@@ -297,9 +297,9 @@ def check_duplicate_listing(
 
     with get_connection() as conn:
         if conn.is_pg:
-            date_condition = "AND jl.created_at > NOW() - INTERVAL '%s days'" % days
+            date_condition = "jl.created_at > NOW() - INTERVAL '%s days'" % days
         else:
-            date_condition = f"AND jl.created_at > datetime('now', '-{days} days')"
+            date_condition = f"jl.created_at > datetime('now', '-{days} days')"
 
         conditions = ["1=1", date_condition]
         params = []
