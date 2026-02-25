@@ -274,3 +274,64 @@ def delete_mock_data():
 def delete_all_data():
     clear_all_data()
     return {"message": "全データを削除しました"}
+
+
+@router.post("/reanalyze-old")
+def reanalyze_old_listings(
+    authorization: str = Header(None),
+    cutoff: str = Query("2026-02-25T04:20:00", description="この日時より前の案件を再解析"),
+):
+    """旧フォーマットの案件を削除して再解析対象にする"""
+    # トークン認証（cron用と同じ）
+    if not Config.CRON_SECRET:
+        raise HTTPException(status_code=500, detail="CRON_SECRET is not configured")
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+    token = authorization[len("Bearer "):]
+    if token != Config.CRON_SECRET:
+        raise HTTPException(status_code=403, detail="Invalid token")
+
+    with get_connection() as conn:
+        # 旧案件のemail_idを取得
+        rows = conn.execute(
+            "SELECT DISTINCT email_id FROM job_listings WHERE created_at < ?",
+            (cutoff,),
+        ).fetchall()
+        email_ids = [r["email_id"] for r in rows]
+
+        if not email_ids:
+            return {"message": "再解析対象の旧案件がありません", "deleted_listings": 0, "reset_emails": 0}
+
+        # 旧案件のIDを取得
+        old_listings = conn.execute(
+            "SELECT id FROM job_listings WHERE created_at < ?",
+            (cutoff,),
+        ).fetchall()
+        old_listing_ids = [r["id"] for r in old_listings]
+
+        # スキルを削除
+        if old_listing_ids:
+            placeholders = ",".join("?" * len(old_listing_ids))
+            conn.execute(
+                f"DELETE FROM skills WHERE listing_id IN ({placeholders})",
+                old_listing_ids,
+            )
+
+        # 旧案件を削除
+        deleted = conn.execute(
+            "DELETE FROM job_listings WHERE created_at < ?",
+            (cutoff,),
+        ).rowcount
+
+        # 該当メールを未処理に戻す
+        placeholders = ",".join("?" * len(email_ids))
+        reset = conn.execute(
+            f"UPDATE emails SET is_processed = FALSE WHERE id IN ({placeholders})",
+            email_ids,
+        ).rowcount
+
+    return {
+        "message": f"旧案件{deleted}件を削除、メール{reset}件を再解析対象にしました",
+        "deleted_listings": deleted,
+        "reset_emails": reset,
+    }
