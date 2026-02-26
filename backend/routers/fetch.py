@@ -353,17 +353,35 @@ def fix_company_names(
     # TODO: 修復完了後に認証を復元する
 
     listings = get_all_listings_with_sender()
+
+    # デバッグ: 最初の10件のbefore/afterを返す
+    debug_mode = True
+    if debug_mode:
+        samples = []
+        for row in listings[:20]:
+            sender = row.get("sender", "")
+            old_name = row.get("company_name", "")
+            new_name = extract_company_from_sender(sender)
+            if not new_name:
+                new_name = _extract_domain_company(sender)
+            samples.append({
+                "id": row["id"],
+                "sender": sender[:80],
+                "old": old_name,
+                "new": new_name,
+                "changed": new_name != old_name and bool(new_name),
+            })
+        return {"samples": samples, "total": len(listings)}
+
     updates = []
     for row in listings:
         sender = row.get("sender", "")
         old_name = row.get("company_name", "")
         new_name = extract_company_from_sender(sender)
 
-        # sender抽出が空の場合はドメインからフォールバック
         if not new_name:
             new_name = _extract_domain_company(sender)
 
-        # 元と変わる場合のみ更新（空→空は除く）
         if new_name and new_name != old_name:
             updates.append((new_name, row["id"]))
 
