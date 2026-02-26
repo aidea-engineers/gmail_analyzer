@@ -1,12 +1,22 @@
 """FastAPI エントリポイント - Gmail Analyzer バックエンド"""
 from __future__ import annotations
 
+import logging
+import sys
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import Config
 from core.database import init_db, cleanup_stale_fetch_logs
 from routers import dashboard, search, fetch, settings
+
+# ロギング設定（Renderログに出力するためstdoutに設定）
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    stream=sys.stdout,
+)
 
 app = FastAPI(
     title="Gmail Analyzer API",
@@ -30,13 +40,15 @@ app.include_router(fetch.router)
 app.include_router(settings.router)
 
 
+logger = logging.getLogger(__name__)
+
+
 @app.on_event("startup")
 def startup():
     init_db()
     cleaned = cleanup_stale_fetch_logs()
     if cleaned:
-        import logging
-        logging.getLogger(__name__).info("Stale fetch logs cleaned up: %d entries", cleaned)
+        logger.info("Stale fetch logs cleaned up: %d entries", cleaned)
 
 
 @app.get("/api/health")
