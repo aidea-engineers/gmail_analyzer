@@ -571,9 +571,8 @@ def extract_company_from_sender(sender: str) -> str:
     # Dynamix営業 → Dynamix, ICD案件情報（東京） → ICD
     dept_cleaned = _remove_department_suffix(name_part)
     if dept_cleaned != name_part:
-        # 部署を除去した結果が人名でなければ会社名
         if not _is_likely_person_name(dept_cleaned):
-            return dept_cleaned
+            name_part = dept_cleaned  # 更新して後続Stepで追加分解
 
     # === Step 5: 全体が人名ならここでは空文字を返す ===
     # （Geminiの抽出結果 or ドメインにフォールバックする）
@@ -581,10 +580,10 @@ def extract_company_from_sender(sender: str) -> str:
         return ""
 
     # === Step 6: 末尾の人名を除去（スペースあり） ===
-    # Re-Vision 飯島 → Re-Vision
+    # Re-Vision 飯島 → Re-Vision, ワクト木村 陽一 → ワクト木村
     cleaned = _remove_trailing_person_name(name_part)
     if cleaned != name_part:
-        return cleaned
+        name_part = cleaned  # 更新して後続Step 7/8で追加分解
 
     # === Step 7: カタカナ/ひらがな/英語 + 末尾漢字姓（スペースなし） ===
     # ワクト木村 → ワクト, EVERRISE齋藤 → EVERRISE, べリアント池田 → べリアント
