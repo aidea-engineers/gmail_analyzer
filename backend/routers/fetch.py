@@ -354,6 +354,7 @@ def fix_company_names(
 
     listings = get_all_listings_with_sender()
     updates = []
+    skipped = []
     for row in listings:
         sender = row.get("sender", "")
         old_name = row.get("company_name", "")
@@ -364,6 +365,13 @@ def fix_company_names(
 
         if new_name and new_name != old_name:
             updates.append((new_name, row["id"]))
+        elif old_name and any(kw in old_name for kw in ["ワクト", "小田部", "新田"]):
+            skipped.append({
+                "id": row["id"],
+                "old_name": old_name,
+                "sender": sender[:100],
+                "new_name": new_name,
+            })
 
     updated = batch_update_company_names(updates)
 
@@ -371,4 +379,5 @@ def fix_company_names(
         "message": f"会社名を{updated}件修復しました（全{len(listings)}件中）",
         "total": len(listings),
         "updated": updated,
+        "debug_skipped": skipped[:10],
     }
