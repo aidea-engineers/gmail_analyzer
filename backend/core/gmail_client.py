@@ -266,7 +266,7 @@ def fetch_and_store_emails(
     service, progress_callback=None
 ) -> int:
     """Gmailからメールを取得してDBに保存する。保存件数を返す。"""
-    from core.database import insert_email, get_connection
+    from core.database import insert_email, get_connection, get_existing_gmail_ids
 
     # 直近のデータ取得日以降のメールを取得
     after_date = None
@@ -282,7 +282,7 @@ def fetch_and_store_emails(
                 after_date = str(latest)[:10].replace("-", "/")
 
     query = build_query(after_date=after_date)
-    logger.info(f"Gmail検索クエリ: {query}")
+    logger.info("Gmail検索クエリ: %s", query)
 
     if progress_callback:
         progress_callback(
@@ -290,15 +290,25 @@ def fetch_and_store_emails(
         )
 
     message_ids = fetch_message_ids(service, query, max_results=Config.MAX_EMAILS_PER_FETCH)
-    total = len(message_ids)
+    total_from_gmail = len(message_ids)
+    logger.info("Gmail API: %d件のメッセージIDを取得", total_from_gmail)
+
+    # 既にDBに存在するメッセージIDをスキップ（高速化）
+    existing_ids = get_existing_gmail_ids(message_ids)
+    new_message_ids = [mid for mid in message_ids if mid not in existing_ids]
+    total = len(new_message_ids)
+    logger.info(
+        "Gmail fetch: %d件中%d件が新規（%d件はDB既存のためスキップ）",
+        total_from_gmail, total, total_from_gmail - total,
+    )
 
     if progress_callback:
         progress_callback(
-            {"phase": "fetch", "current": 0, "total": total, "message": f"{total}件のメールを取得中..."}
+            {"phase": "fetch", "current": 0, "total": total, "message": f"新規{total}件のメールを取得中..."}
         )
 
     stored = 0
-    for i, msg_id in enumerate(message_ids):
+    for i, msg_id in enumerate(new_message_ids):
         detail = fetch_message_detail(service, msg_id)
         if detail:
             result = insert_email(
@@ -322,4 +332,5 @@ def fetch_and_store_emails(
                 }
             )
 
+    logger.info("Gmail fetch完了: 新規%d件を保存", stored)
     return stored

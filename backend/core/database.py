@@ -277,6 +277,24 @@ def insert_email(
             return None
 
 
+def get_existing_gmail_ids(gmail_message_ids: list[str]) -> set[str]:
+    """既にDBに存在するgmail_message_idのセットを返す"""
+    if not gmail_message_ids:
+        return set()
+    with get_connection() as conn:
+        # バッチサイズ100ずつで処理（SQLパラメータ数制限対策）
+        existing = set()
+        for i in range(0, len(gmail_message_ids), 100):
+            batch = gmail_message_ids[i : i + 100]
+            placeholders = ",".join("?" * len(batch))
+            rows = conn.execute(
+                f"SELECT gmail_message_id FROM emails WHERE gmail_message_id IN ({placeholders})",
+                batch,
+            ).fetchall()
+            existing.update(r["gmail_message_id"] for r in rows)
+        return existing
+
+
 def get_unprocessed_emails(limit: int = 100) -> list[dict]:
     with get_connection() as conn:
         rows = conn.execute(
