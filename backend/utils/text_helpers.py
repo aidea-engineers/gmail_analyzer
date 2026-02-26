@@ -290,8 +290,10 @@ _CORP_KEYWORDS = [
 _DEPT_SUFFIXES = sorted(
     [
         "ITパートナー営業部", "パートナー営業部", "ビジネスパートナー事業部",
+        "ビジネスパートナー推進室", "パートナー推進共通", "パートナー推進室",
         "人材サービス部", "HRサービス部", "人材ソリューション部",
-        "営業部", "営業", "事業部", "技術部", "人事部", "総務部",
+        "営業共通", "営業アドレス", "営業本部", "営業部", "営業",
+        "SES事業担当", "事業部", "技術部", "人事部", "総務部",
         "開発部", "人材部", "採用部", "採用担当", "システム部",
     ],
     key=len,
@@ -304,6 +306,7 @@ _HIRA = r"\u3040-\u309f"
 _KATA = r"\u30a0-\u30ff"
 _CJK_MARKS = r"\u3005-\u3007"  # 々〆〇
 _JP_CHAR = rf"[{_CJK}{_HIRA}{_KATA}{_CJK_MARKS}]"
+_KANJI_CHAR = rf"[{_CJK}{_CJK_MARKS}]"  # 漢字+々のみ（カタカナ含まず）
 
 
 def _contains_corp_keyword(text: str) -> bool:
@@ -318,6 +321,13 @@ def _is_likely_person_name(text: str) -> bool:
         return False
     # 姓(1-3文字) + スペース + 名(1-3文字)
     if re.match(rf"^{_JP_CHAR}{{1,3}}[\s\u3000]+{_JP_CHAR}{{1,3}}$", text):
+        return True
+    # スペースなし漢字のみ2-5文字（木戸、田中一広、内田和希、龍門未沙）
+    # ※カタカナを含まない＆法人格キーワードを含まない場合のみ
+    if re.match(rf"^{_KANJI_CHAR}{{2,5}}$", text) and not _contains_corp_keyword(text):
+        return True
+    # 漢字姓(1-3文字) + ひらがな名(1-4文字)（大島ももね、高橋はるか）
+    if re.match(rf"^{_KANJI_CHAR}{{1,3}}[{_HIRA}]{{1,4}}$", text):
         return True
     return False
 
@@ -349,6 +359,18 @@ def _remove_trailing_person_name(text: str) -> str:
 
 def _remove_department_suffix(text: str) -> str:
     """部署名サフィックスを除去する"""
+    # 末尾の括弧付き部署を除去: "会社名(営業)" → "会社名"
+    paren_dept = re.sub(r"[（(](営業|採用|人事|技術)[）)]$", "", text).strip()
+    if paren_dept != text and paren_dept:
+        return paren_dept
+
+    # アンダースコア区切りの情報を除去: "会社名_案件リスト（定期メール）" → "会社名"
+    if "_" in text:
+        prefix = text.split("_", 1)[0].strip()
+        if prefix and len(prefix) >= 2:
+            return prefix
+
+    # 通常の部署名サフィックス除去
     for suffix in _DEPT_SUFFIXES:
         if text.endswith(suffix):
             cleaned = text[: -len(suffix)].strip()
@@ -447,12 +469,23 @@ def extract_company_from_sender(sender: str) -> str:
     if _is_likely_person_name(name_part):
         return ""
 
-    # === Step 6: 末尾の人名を除去 ===
+    # === Step 6: 末尾の人名を除去（スペースあり） ===
     # Re-Vision 飯島 → Re-Vision
     cleaned = _remove_trailing_person_name(name_part)
     if cleaned != name_part:
         return cleaned
 
-    # === Step 7: そのまま返す ===
+    # === Step 7: カタカナ/英語 + 末尾漢字姓（スペースなし） ===
+    # ワクト木村 → ワクト, EVERRISE齋藤 → EVERRISE, インフロント佐々木柚果 → インフロント
+    m = re.match(
+        rf"^((?:[A-Za-z0-9\-_.]+|[{_KATA}]+)+)({_KANJI_CHAR}{{1,5}})$",
+        name_part,
+    )
+    if m:
+        prefix = m.group(1).rstrip("_-. ")
+        if len(prefix) >= 2:
+            return prefix
+
+    # === Step 8: そのまま返す ===
     # conviction-inc → conviction-inc
     return name_part
