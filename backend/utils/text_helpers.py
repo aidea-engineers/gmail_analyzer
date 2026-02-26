@@ -292,9 +292,10 @@ _DEPT_SUFFIXES = sorted(
         "ITパートナー営業部", "パートナー営業部", "ビジネスパートナー事業部",
         "ビジネスパートナー推進室", "パートナー推進共通", "パートナー推進室",
         "人材サービス部", "HRサービス部", "人材ソリューション部",
-        "営業共通", "営業アドレス", "営業本部", "営業部", "営業",
+        "営業共通", "営業アドレス", "営業グループ", "営業本部", "営業部", "営業",
         "SES事業担当", "事業部", "技術部", "人事部", "総務部",
         "開発部", "人材部", "採用部", "採用担当", "システム部",
+        "案件情報担当", "案件情報", "案件配信",
     ],
     key=len,
     reverse=True,
@@ -332,6 +333,12 @@ def _is_likely_person_name(text: str) -> bool:
     return False
 
 
+def _is_likely_english_person_name(text: str) -> bool:
+    """英語/ローマ字の人名パターンを判定 (FirstName LastName)"""
+    text = text.strip()
+    return bool(re.match(r"^[A-Z][a-z]+\s+[A-Z][a-z]+$", text))
+
+
 def _remove_trailing_person_name(text: str) -> str:
     """末尾の日本人名（姓 名 or 姓のみ）を除去する"""
     # "会社名 姓 名" → "会社名"
@@ -359,16 +366,27 @@ def _remove_trailing_person_name(text: str) -> str:
 
 def _remove_department_suffix(text: str) -> str:
     """部署名サフィックスを除去する"""
+    # 案件情報（XXX）パターン: "ICD案件情報（東京）" → "ICD"
+    info_cleaned = re.sub(r"案件情報[（(][^）)]*[）)]$", "", text).strip()
+    if info_cleaned != text and info_cleaned:
+        return info_cleaned
+
     # 末尾の括弧付き部署を除去: "会社名(営業)" → "会社名"
     paren_dept = re.sub(r"[（(](営業|採用|人事|技術)[）)]$", "", text).strip()
     if paren_dept != text and paren_dept:
         return paren_dept
 
-    # アンダースコア区切りの情報を除去: "会社名_案件リスト（定期メール）" → "会社名"
+    # アンダースコア区切り
     if "_" in text:
-        prefix = text.split("_", 1)[0].strip()
-        if prefix and len(prefix) >= 2:
-            return prefix
+        parts = text.split("_", 1)
+        first, second = parts[0].strip(), parts[1].strip()
+        if first and second:
+            # 人名_社名 → 社名（横谷拓人_Digverse → Digverse）
+            if _is_likely_person_name(first) and len(second) >= 2:
+                return second
+            # 社名_サフィックス → 社名（ディーメイク_案件リスト → ディーメイク）
+            if len(first) >= 2:
+                return first
 
     # 通常の部署名サフィックス除去
     for suffix in _DEPT_SUFFIXES:
@@ -391,6 +409,44 @@ def _extract_domain_company(sender: str) -> str:
     return ""
 
 
+def _clean_corp_result(result: str) -> str:
+    """法人格キーワード抽出結果を後処理する（人名・部署除去）"""
+    # スラッシュ + 人名: 株式会社Kir/大関 → 株式会社Kir
+    if "/" in result:
+        base, suffix = result.split("/", 1)
+        base, suffix = base.strip(), suffix.strip()
+        if base and _contains_corp_keyword(base) and _is_likely_person_name(suffix):
+            return base
+
+    # 法人格キーワード後の部分を検査
+    for kw in ["株式会社", "有限会社", "合同会社", "一般社団法人", "合資会社"]:
+        if kw not in result:
+            continue
+        idx = result.index(kw)
+        after = result[idx + len(kw):].strip()
+        if not after:
+            break  # 法人格のみ → そのまま
+
+        # after全体が明確な人名（4文字以上 or スペース含む） → 空文字
+        if _is_likely_person_name(after) and (
+            len(after) >= 4 or re.search(r"[\s\u3000]", after)
+        ):
+            return ""
+
+        # afterが「カタカナ/英語 + 末尾漢字姓」→ 漢字姓を除去
+        m = re.match(
+            rf"^((?:[A-Za-z0-9\-_.]+|[{_KATA}]+)+)({_KANJI_CHAR}{{1,3}})$",
+            after,
+        )
+        if m:
+            cleaned = m.group(1).rstrip("_-. ")
+            if len(cleaned) >= 2:
+                return kw + cleaned
+        break
+
+    return result
+
+
 def extract_company_from_sender(sender: str) -> str:
     """メール送信者のFromヘッダーから会社名のみを抽出する（担当者名・部署名は除外）
 
@@ -406,6 +462,58 @@ def extract_company_from_sender(sender: str) -> str:
 
     if not name_part or "@" in name_part:
         return _extract_domain_company(sender)
+
+    # === Step 0: 前処理（特殊区切り文字） ===
+
+    # 0a: 全角山括弧: ＜富士ソフト＞案件情報 → 富士ソフト
+    fw_bracket_m = re.search(r"[＜<]([^＞>]+)[＞>]", name_part)
+    if fw_bracket_m:
+        inner = fw_bracket_m.group(1).strip()
+        if inner:
+            return inner
+
+    # 0b: スラッシュ区切り: 株式会社Kir/大関 → 株式会社Kir
+    if "/" in name_part:
+        sp0, sp1 = [p.strip() for p in name_part.split("/", 1)]
+        if _contains_corp_keyword(sp0) and _is_likely_person_name(sp1):
+            name_part = sp0
+        elif _contains_corp_keyword(sp1) and _is_likely_person_name(sp0):
+            name_part = sp1
+        elif _is_likely_person_name(sp1) and not _is_likely_person_name(sp0) and len(sp0) >= 2:
+            name_part = sp0
+        elif _is_likely_person_name(sp0) and not _is_likely_person_name(sp1) and len(sp1) >= 2:
+            name_part = sp1
+
+    # 0c: 特殊記号区切り: アイスタンダード★小瀧 → アイスタンダード
+    special_parts = re.split(r"[★☆●◆◇■□▲△▼▽]", name_part)
+    if len(special_parts) == 2:
+        a, b = special_parts[0].strip(), special_parts[1].strip()
+        if a and b:
+            if _is_likely_person_name(b) and not _is_likely_person_name(a):
+                name_part = a
+            elif _is_likely_person_name(a) and not _is_likely_person_name(b):
+                name_part = b
+
+    # 0d: はぐれ閉じ括弧: SI)平山 → SI
+    stray_paren_m = re.match(r"^([A-Za-z0-9]+)\)(.+)$", name_part)
+    if stray_paren_m:
+        prefix = stray_paren_m.group(1).strip()
+        suffix = stray_paren_m.group(2).strip()
+        if _is_likely_person_name(suffix):
+            return prefix if len(prefix) >= 2 else ""
+
+    # 0e: アンダースコア前処理
+    if "_" in name_part:
+        u_first, u_second = [p.strip() for p in name_part.split("_", 1)]
+        # 両方使えない: E_竹内 → ""
+        if u_second and _is_likely_person_name(u_second) and len(u_first) < 2:
+            return ""
+        # 人名_社名: 横谷拓人_Digverse → Digverse
+        if u_first and u_second and _is_likely_person_name(u_first) and len(u_second) >= 2:
+            name_part = u_second
+        # 社名_サフィックス: 株式会社NALU_案件配信 → 株式会社NALU
+        elif u_first and len(u_first) >= 2:
+            name_part = u_first
 
     # === Step 1: 角括弧・隅付き括弧から会社名を抽出 ===
     # [株式会社AGEST]ITパートナー営業部 → 株式会社AGEST
@@ -423,14 +531,17 @@ def extract_company_from_sender(sender: str) -> str:
         inner = paren_m.group(1).strip()
         outer = re.sub(r"[（(][^）)]+[）)]", "", name_part).strip()
         if inner:
-            # 外が人名（スペースあり）→ 中が会社名
+            # 外が日本人名 → 中が会社名
             if _is_likely_person_name(outer):
                 return inner
-            # 外がCJK2-6文字（スペースなし人名）で中が英数字（会社略称）
+            # 外がCJK2-6文字で中が英数字（会社略称）
             if (
                 re.match(rf"^{_JP_CHAR}{{2,6}}$", outer)
                 and re.match(r"^[A-Za-z0-9\-_.&]+$", inner)
             ):
+                return inner
+            # 外が英語人名 → 中が会社名: Sana Nakao（OCM） → OCM
+            if _is_likely_english_person_name(outer):
                 return inner
 
     # === Step 3: 法人格キーワードによる抽出 ===
@@ -441,7 +552,7 @@ def extract_company_from_sender(sender: str) -> str:
         name_part,
     )
     if corp_m:
-        return corp_m.group(1).strip()
+        return _clean_corp_result(corp_m.group(1).strip())
 
     # 後置法人格: ABC株式会社
     corp_m2 = re.search(
@@ -457,7 +568,7 @@ def extract_company_from_sender(sender: str) -> str:
         return corp_m3.group(1).strip()
 
     # === Step 4: 部署名サフィックスの除去 ===
-    # Dynamix営業 → Dynamix
+    # Dynamix営業 → Dynamix, ICD案件情報（東京） → ICD
     dept_cleaned = _remove_department_suffix(name_part)
     if dept_cleaned != name_part:
         # 部署を除去した結果が人名でなければ会社名
@@ -475,10 +586,10 @@ def extract_company_from_sender(sender: str) -> str:
     if cleaned != name_part:
         return cleaned
 
-    # === Step 7: カタカナ/英語 + 末尾漢字姓（スペースなし） ===
-    # ワクト木村 → ワクト, EVERRISE齋藤 → EVERRISE, インフロント佐々木柚果 → インフロント
+    # === Step 7: カタカナ/ひらがな/英語 + 末尾漢字姓（スペースなし） ===
+    # ワクト木村 → ワクト, EVERRISE齋藤 → EVERRISE, べリアント池田 → べリアント
     m = re.match(
-        rf"^((?:[A-Za-z0-9\-_.]+|[{_KATA}]+)+)({_KANJI_CHAR}{{1,5}})$",
+        rf"^((?:[A-Za-z0-9\-_.]+|[{_KATA}{_HIRA}]+)+)({_KANJI_CHAR}{{1,5}})$",
         name_part,
     )
     if m:
@@ -486,6 +597,17 @@ def extract_company_from_sender(sender: str) -> str:
         if len(prefix) >= 2:
             return prefix
 
-    # === Step 8: そのまま返す ===
+    # === Step 8: 漢字姓 + カタカナ社名（スペースなし） ===
+    # 小関スキルコネクト → スキルコネクト
+    m = re.match(
+        rf"^({_KANJI_CHAR}{{1,3}})((?:[{_KATA}]{{5,}}|[A-Za-z]{{5,}}).*)$",
+        name_part,
+    )
+    if m:
+        suffix = m.group(2).strip()
+        if len(suffix) >= 3:
+            return suffix
+
+    # === Step 9: そのまま返す ===
     # conviction-inc → conviction-inc
     return name_part
