@@ -31,6 +31,7 @@ def run_extraction_only(
         # 未処理メールを取得
         unprocessed = get_unprocessed_emails(limit=Config.BATCH_SIZE)
         total = len(unprocessed)
+        logger.info("Extraction: found %d unprocessed emails (limit=%d)", total, Config.BATCH_SIZE)
 
         if total == 0:
             update_fetch_log(log_id, status="completed", errors=["未処理メールなし"])
@@ -83,8 +84,15 @@ def run_extraction_only(
 
             except Exception as e:
                 error_msg = f"メールID {email_id}: {str(e)}"
-                logger.error(error_msg)
+                logger.error(error_msg, exc_info=True)
                 errors.append(error_msg)
+
+            # 10件ごとに進捗ログ
+            if (i + 1) % 10 == 0:
+                logger.info(
+                    "Extraction progress: %d/%d (processed=%d, listings=%d, errors=%d)",
+                    i + 1, total, result.emails_processed, result.listings_created, result.api_errors,
+                )
 
             if progress_callback:
                 progress_callback(
@@ -103,11 +111,15 @@ def run_extraction_only(
 
         result.status = "completed"
         result.errors = errors
+        logger.info(
+            "Extraction complete: processed=%d listings=%d api_errors=%d",
+            result.emails_processed, result.listings_created, result.api_errors,
+        )
 
     except Exception as e:
         result.status = "failed"
         result.errors = [str(e)]
-        logger.error(f"バッチ処理エラー: {e}")
+        logger.error("バッチ処理エラー: %s", e, exc_info=True)
 
     update_fetch_log(
         log_id,
@@ -145,8 +157,10 @@ def run_full_pipeline(
 
             from core.gmail_client import fetch_and_store_emails
 
+            logger.info("Full pipeline: starting Gmail fetch...")
             fetched = fetch_and_store_emails(gmail_service, progress_callback)
             result.emails_fetched = fetched
+            logger.info("Full pipeline: Gmail fetch complete, fetched=%d emails", fetched)
 
             if progress_callback:
                 progress_callback(
@@ -159,6 +173,7 @@ def run_full_pipeline(
                 )
 
         # Phase 2: Gemini抽出
+        logger.info("Full pipeline: starting extraction phase...")
         extraction_result = run_extraction_only(progress_callback)
         result.emails_processed = extraction_result.emails_processed
         result.listings_created = extraction_result.listings_created

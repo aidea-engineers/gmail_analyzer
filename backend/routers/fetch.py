@@ -179,16 +179,19 @@ def _run_cron_pipeline_bg():
         service = get_gmail_service()
         if not service:
             logger.error("Cron pipeline: Gmail接続に失敗しました")
-            # fetch_logは run_full_pipeline 内で作られるため、
-            # ここでは作成されていない → staleにはならない
             return
 
         # Phase 1: メール取得 + 初回AI解析（200件まで）
+        logger.info("Cron pipeline: Phase 1 starting (Gmail fetch + initial extraction)")
         result = run_full_pipeline(gmail_service=service)
         total_fetched = result.emails_fetched
         total_processed = result.emails_processed
         total_listings = result.listings_created
         total_errors = result.api_errors
+        logger.info(
+            "Cron pipeline: Phase 1 complete: fetched=%d processed=%d listings=%d errors=%d status=%s",
+            total_fetched, total_processed, total_listings, total_errors, result.status,
+        )
 
         # Phase 2: 未処理が残っている場合はループで全件処理
         batch_num = 1
@@ -200,6 +203,10 @@ def _run_cron_pipeline_bg():
             total_processed += result.emails_processed
             total_listings += result.listings_created
             total_errors += result.api_errors
+            logger.info(
+                "Cron pipeline: batch %d complete: processed=%d listings=%d errors=%d",
+                batch_num, result.emails_processed, result.listings_created, result.api_errors,
+            )
 
         logger.info(
             "Cron pipeline completed: fetched=%d processed=%d listings=%d errors=%d batches=%d",
