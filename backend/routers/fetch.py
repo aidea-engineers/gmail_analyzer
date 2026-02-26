@@ -354,24 +354,41 @@ def fix_company_names(
 
     listings = get_all_listings_with_sender()
 
-    # デバッグ: 最初の10件のbefore/afterを返す
+    # デバッグ: 変更があるもの + 最新20件を返す
     debug_mode = True
     if debug_mode:
-        samples = []
-        for row in listings[:20]:
+        changes = []
+        latest = []
+        for row in listings:
             sender = row.get("sender", "")
             old_name = row.get("company_name", "")
             new_name = extract_company_from_sender(sender)
             if not new_name:
                 new_name = _extract_domain_company(sender)
-            samples.append({
+            item = {
                 "id": row["id"],
-                "sender": sender[:80],
+                "sender": sender[:100],
+                "old": old_name,
+                "new": new_name,
+            }
+            if new_name and new_name != old_name:
+                changes.append(item)
+        # 最新20件（ID降順）
+        sorted_listings = sorted(listings, key=lambda x: x["id"], reverse=True)
+        for row in sorted_listings[:20]:
+            sender = row.get("sender", "")
+            old_name = row.get("company_name", "")
+            new_name = extract_company_from_sender(sender)
+            if not new_name:
+                new_name = _extract_domain_company(sender)
+            latest.append({
+                "id": row["id"],
+                "sender": sender[:100],
                 "old": old_name,
                 "new": new_name,
                 "changed": new_name != old_name and bool(new_name),
             })
-        return {"samples": samples, "total": len(listings)}
+        return {"changes_count": len(changes), "changes_sample": changes[:10], "latest": latest, "total": len(listings)}
 
     updates = []
     for row in listings:
