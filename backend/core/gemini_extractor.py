@@ -16,6 +16,7 @@ from utils.text_helpers import (
     normalize_skill_name,
     normalize_area,
     extract_company_from_sender,
+    _extract_domain_company,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,12 +35,14 @@ EXTRACTION_PROMPT = """あなたはSES（システムエンジニアリングサ
   - 案件情報が含まれないメール
 案件でない場合はis_job_listing=falseの要素を1つだけ返してください。
 
-## company_name（会社名）
-**メール送信者の企業名のみを記載すること。**
+## company_name（会社名）＝メール送信元の企業名
+**メールを送ってきた企業（送信者の所属企業）の名前のみを記載すること。**
 送信者名「{sender}」から企業名を抽出して使用する。
+送信者名が人名のみの場合（例:「田中 太郎」）は、メール本文末尾の署名欄・フッターから送信者の所属企業名を探して記載すること。
 本文中に記載された案件先・クライアント企業名は使用しないこと（それはproject_detailsに含める）。
 「○○サービス運営企業」のような案件先の説明をcompany_nameに入れてはいけない。
-**必ず送信者の企業名を記載すること。**
+**必ず送信者の企業名のみを記載すること。担当者名・部署名は含めないこと。**
+例: ○「株式会社ABC」 ✕「株式会社ABC 田中」 ✕「株式会社ABC営業部」
 
 ## work_area（エリア/勤務地）
 以下のカテゴリから最も適切なものを選択すること（駅名や住所ではなく大分類で記載）:
@@ -126,17 +129,24 @@ def extract_from_email(
 
             result = EmailExtractionResult.model_validate_json(response.text)
 
-            # 後処理: スキル正規化 + エリア正規化 + 社名を常にsenderから設定
+            # 後処理: スキル正規化 + エリア正規化 + 社名補正
             sender_company = extract_company_from_sender(sender)
+            domain_company = _extract_domain_company(sender)
             for listing in result.listings:
                 listing.required_skills = [
                     normalize_skill_name(s) for s in listing.required_skills
                 ]
                 if listing.work_area:
                     listing.work_area = normalize_area(listing.work_area)
-                # 会社名は常にsenderの企業名を使用（Geminiが案件先名を入れる問題を防止）
+                # 会社名の優先順位:
+                # 1. sender解析で会社名が取れた → それを使用
+                # 2. sender解析が空 → Geminiの抽出結果を使用（署名欄等から取得）
+                # 3. Geminiも空 → ドメインから推測
                 if sender_company:
                     listing.company_name = sender_company
+                elif not listing.company_name:
+                    if domain_company:
+                        listing.company_name = domain_company
 
             return result.listings
 

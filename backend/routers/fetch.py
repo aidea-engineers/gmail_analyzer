@@ -12,9 +12,15 @@ import logging
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
-from core.database import get_connection, get_fetch_logs
+from core.database import (
+    get_connection,
+    get_fetch_logs,
+    get_all_listings_with_sender,
+    update_listing_company_name,
+)
 from core.mock_data import generate_and_insert, clear_all_data, clear_mock_data
 from core.gmail_client import is_authenticated
+from utils.text_helpers import extract_company_from_sender, _extract_domain_company
 from config import Config
 
 logger = logging.getLogger(__name__)
@@ -173,6 +179,8 @@ def _run_cron_pipeline_bg():
         service = get_gmail_service()
         if not service:
             logger.error("Cron pipeline: Gmail接続に失敗しました")
+            # fetch_logは run_full_pipeline 内で作られるため、
+            # ここでは作成されていない → staleにはならない
             return
 
         # Phase 1: メール取得 + 初回AI解析（200件まで）
@@ -184,7 +192,8 @@ def _run_cron_pipeline_bg():
 
         # Phase 2: 未処理が残っている場合はループで全件処理
         batch_num = 1
-        while result.emails_processed > 0:
+        max_batches = 20  # 無限ループ防止（最大20バッチ = 4,000件）
+        while result.emails_processed > 0 and batch_num < max_batches:
             batch_num += 1
             logger.info("Cron pipeline: extraction batch %d starting", batch_num)
             result = run_extraction_only()
@@ -333,4 +342,40 @@ def reanalyze_old_listings(
         "message": f"旧案件{deleted}件を削除、メール{reset}件を再解析対象にしました",
         "deleted_listings": deleted,
         "reset_emails": reset,
+    }
+
+
+@router.post("/fix-company-names")
+def fix_company_names(
+    authorization: str = Header(None),
+):
+    """既存案件の会社名を再抽出して修復する（担当者名・部署名を除去）"""
+    if not Config.CRON_SECRET:
+        raise HTTPException(status_code=500, detail="CRON_SECRET is not configured")
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+    token = authorization[len("Bearer "):]
+    if token != Config.CRON_SECRET:
+        raise HTTPException(status_code=403, detail="Invalid token")
+
+    listings = get_all_listings_with_sender()
+    updated = 0
+    for row in listings:
+        sender = row.get("sender", "")
+        old_name = row.get("company_name", "")
+        new_name = extract_company_from_sender(sender)
+
+        # sender抽出が空の場合はドメインからフォールバック
+        if not new_name:
+            new_name = _extract_domain_company(sender)
+
+        # 元と変わる場合のみ更新（空→空は除く）
+        if new_name and new_name != old_name:
+            update_listing_company_name(row["id"], new_name)
+            updated += 1
+
+    return {
+        "message": f"会社名を{updated}件修復しました（全{len(listings)}件中）",
+        "total": len(listings),
+        "updated": updated,
     }

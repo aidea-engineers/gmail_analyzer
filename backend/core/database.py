@@ -697,6 +697,26 @@ def get_fetch_logs(limit: int = 10) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def get_all_listings_with_sender() -> list[dict]:
+    """全案件とそのメール送信者を取得する（会社名修復用）"""
+    with get_connection() as conn:
+        rows = conn.execute(
+            """SELECT jl.id, jl.company_name, e.sender
+               FROM job_listings jl
+               JOIN emails e ON jl.email_id = e.id"""
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def update_listing_company_name(listing_id: int, company_name: str):
+    """案件の会社名を更新する"""
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE job_listings SET company_name = ? WHERE id = ?",
+            (company_name, listing_id),
+        )
+
+
 def cleanup_stale_fetch_logs(stale_minutes: int = 10) -> int:
     """'running' のまま放置されたfetch_logを 'failed (stale)' に更新する"""
     with get_connection() as conn:

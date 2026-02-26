@@ -278,23 +278,181 @@ def normalize_area(area: str) -> str:
     return area  # マッチしなければ元の値を返す
 
 
+# --- 会社名抽出 ---
+
+# 法人格キーワード
+_CORP_KEYWORDS = [
+    "株式会社", "有限会社", "合同会社", "一般社団法人", "合資会社",
+    "(株)", "（株）",
+]
+
+# 部署名サフィックス（長い順にマッチさせる）
+_DEPT_SUFFIXES = sorted(
+    [
+        "ITパートナー営業部", "パートナー営業部", "ビジネスパートナー事業部",
+        "人材サービス部", "HRサービス部", "人材ソリューション部",
+        "営業部", "営業", "事業部", "技術部", "人事部", "総務部",
+        "開発部", "人材部", "採用部", "採用担当", "システム部",
+    ],
+    key=len,
+    reverse=True,
+)
+
+# CJK文字の正規表現クラス（漢字・ひらがな・カタカナ + 々〆〇等）
+_CJK = r"\u4e00-\u9fff"
+_HIRA = r"\u3040-\u309f"
+_KATA = r"\u30a0-\u30ff"
+_CJK_MARKS = r"\u3005-\u3007"  # 々〆〇
+_JP_CHAR = rf"[{_CJK}{_HIRA}{_KATA}{_CJK_MARKS}]"
+
+
+def _contains_corp_keyword(text: str) -> bool:
+    """法人格キーワードを含むか"""
+    return any(kw in text for kw in _CORP_KEYWORDS)
+
+
+def _is_likely_person_name(text: str) -> bool:
+    """テキスト全体が日本人の氏名かどうかを判定する"""
+    text = text.strip()
+    if not text:
+        return False
+    # 姓(1-3文字) + スペース + 名(1-3文字)
+    if re.match(rf"^{_JP_CHAR}{{1,3}}[\s\u3000]+{_JP_CHAR}{{1,3}}$", text):
+        return True
+    return False
+
+
+def _remove_trailing_person_name(text: str) -> str:
+    """末尾の日本人名（姓 名 or 姓のみ）を除去する"""
+    # "会社名 姓 名" → "会社名"
+    m = re.match(
+        rf"^(.+?)[\s\u3000]+({_JP_CHAR}{{1,3}}[\s\u3000]+{_JP_CHAR}{{1,3}})$",
+        text,
+    )
+    if m:
+        prefix = m.group(1).strip()
+        if prefix and not _is_likely_person_name(prefix):
+            return prefix
+
+    # "会社名 姓" → "会社名"（姓 = 1-3漢字）
+    m = re.match(
+        rf"^(.+?)[\s\u3000]+([{_CJK}]{{1,3}})$",
+        text,
+    )
+    if m:
+        prefix = m.group(1).strip()
+        if prefix and not _is_likely_person_name(prefix):
+            return prefix
+
+    return text
+
+
+def _remove_department_suffix(text: str) -> str:
+    """部署名サフィックスを除去する"""
+    for suffix in _DEPT_SUFFIXES:
+        if text.endswith(suffix):
+            cleaned = text[: -len(suffix)].strip()
+            if cleaned:
+                return cleaned
+    return text
+
+
+def _extract_domain_company(sender: str) -> str:
+    """メールアドレスのドメインから会社名を推測する（最終手段）"""
+    match = re.search(r"@([^.]+)", sender)
+    if match:
+        domain = match.group(1)
+        # gmail, yahoo, outlook 等の汎用ドメインは除外
+        generic = {"gmail", "yahoo", "outlook", "hotmail", "icloud", "aol", "mail"}
+        if domain.lower() not in generic:
+            return domain
+    return ""
+
+
 def extract_company_from_sender(sender: str) -> str:
-    """メール送信者のFromヘッダーから会社名を推測する"""
+    """メール送信者のFromヘッダーから会社名のみを抽出する（担当者名・部署名は除外）
+
+    Returns:
+        会社名文字列。特定できない場合は空文字列。
+    """
     if not sender:
         return ""
 
-    # "株式会社ABC <abc@example.com>" → "株式会社ABC"
+    # メールアドレス部分を除去: "Name <email>" → "Name"
     name_part = re.sub(r"<[^>]+>", "", sender).strip()
-    # 末尾の空白やクォートを除去
     name_part = name_part.strip("\"' ")
 
-    # 名前部分がメールアドレスそのもの（<>なしの裸アドレス）の場合はドメインから推測
-    if name_part and "@" not in name_part:
-        return name_part
+    if not name_part or "@" in name_part:
+        return _extract_domain_company(sender)
 
-    # メールアドレスからドメイン名を抽出
-    match = re.search(r"@([^.]+)", sender)
-    if match:
-        return match.group(1)
+    # === Step 1: 角括弧・隅付き括弧から会社名を抽出 ===
+    # [株式会社AGEST]ITパートナー営業部 → 株式会社AGEST
+    # 【スキルジー】白井 → スキルジー
+    bracket_m = re.search(r"[\[【\[]([^\]】\]]+)[\]】\]]", name_part)
+    if bracket_m:
+        inner = bracket_m.group(1).strip()
+        if inner:
+            return inner
 
-    return ""
+    # === Step 2: 丸括弧で外が人名・中が会社名のパターン ===
+    # 櫻井菜々子(IDH) → IDH
+    paren_m = re.search(r"[（(]([^）)]+)[）)]", name_part)
+    if paren_m:
+        inner = paren_m.group(1).strip()
+        outer = re.sub(r"[（(][^）)]+[）)]", "", name_part).strip()
+        if inner:
+            # 外が人名（スペースあり）→ 中が会社名
+            if _is_likely_person_name(outer):
+                return inner
+            # 外がCJK2-6文字（スペースなし人名）で中が英数字（会社略称）
+            if (
+                re.match(rf"^{_JP_CHAR}{{2,6}}$", outer)
+                and re.match(r"^[A-Za-z0-9\-_.&]+$", inner)
+            ):
+                return inner
+
+    # === Step 3: 法人格キーワードによる抽出 ===
+    # 株式会社レルモ 清水 → 株式会社レルモ
+    # 株式会社D-Standing 本多 愛理 → 株式会社D-Standing
+    corp_m = re.search(
+        r"((?:株式会社|有限会社|合同会社|一般社団法人|合資会社)\s*\S+)",
+        name_part,
+    )
+    if corp_m:
+        return corp_m.group(1).strip()
+
+    # 後置法人格: ABC株式会社
+    corp_m2 = re.search(
+        r"(\S+\s*(?:株式会社|有限会社|合同会社))",
+        name_part,
+    )
+    if corp_m2:
+        return corp_m2.group(1).strip()
+
+    # (株)パターン
+    corp_m3 = re.search(r"(\S*[（(]株[）)]\S*)", name_part)
+    if corp_m3:
+        return corp_m3.group(1).strip()
+
+    # === Step 4: 部署名サフィックスの除去 ===
+    # Dynamix営業 → Dynamix
+    dept_cleaned = _remove_department_suffix(name_part)
+    if dept_cleaned != name_part:
+        # 部署を除去した結果が人名でなければ会社名
+        if not _is_likely_person_name(dept_cleaned):
+            return dept_cleaned
+
+    # === Step 5: 全体が人名ならここでは空文字を返す ===
+    # （Geminiの抽出結果 or ドメインにフォールバックする）
+    if _is_likely_person_name(name_part):
+        return ""
+
+    # === Step 6: 末尾の人名を除去 ===
+    # Re-Vision 飯島 → Re-Vision
+    cleaned = _remove_trailing_person_name(name_part)
+    if cleaned != name_part:
+        return cleaned
+
+    # === Step 7: そのまま返す ===
+    # conviction-inc → conviction-inc
+    return name_part
