@@ -14,6 +14,7 @@ from core.database import (
     get_distinct_skills,
     get_distinct_areas,
     get_distinct_job_types,
+    get_distinct_companies,
 )
 from utils.date_helpers import format_date_jp
 
@@ -26,6 +27,7 @@ def search_filters():
         "skills": get_distinct_skills(),
         "areas": get_distinct_areas(),
         "job_types": get_distinct_job_types(),
+        "companies": get_distinct_companies(),
     }
 
 
@@ -36,6 +38,7 @@ def search_listings_api(
     skills: Optional[str] = Query(None, description="カンマ区切りスキル"),
     areas: Optional[str] = Query(None, description="カンマ区切りエリア"),
     job_types: Optional[str] = Query(None, description="カンマ区切り職種"),
+    companies: Optional[str] = Query(None, description="カンマ区切り会社名"),
     price_min: Optional[int] = None,
     price_max: Optional[int] = None,
     date_from: Optional[str] = None,
@@ -44,6 +47,7 @@ def search_listings_api(
     skills_list = [s.strip() for s in skills.split(",") if s.strip()] if skills else None
     areas_list = [a.strip() for a in areas.split(",") if a.strip()] if areas else None
     types_list = [t.strip() for t in job_types.split(",") if t.strip()] if job_types else None
+    companies_list = [c.strip() for c in companies.split(",") if c.strip()] if companies else None
 
     results = search_listings(
         keyword=keyword,
@@ -51,6 +55,7 @@ def search_listings_api(
         skills=skills_list,
         areas=areas_list,
         job_types=types_list,
+        companies=companies_list,
         price_min=price_min if price_min and price_min > 0 else None,
         price_max=price_max if price_max and price_max < 200 else None,
         date_from=date_from,
@@ -97,6 +102,7 @@ def export_csv(
     skills: Optional[str] = None,
     areas: Optional[str] = None,
     job_types: Optional[str] = None,
+    companies: Optional[str] = None,
     price_min: Optional[int] = None,
     price_max: Optional[int] = None,
     date_from: Optional[str] = None,
@@ -105,6 +111,7 @@ def export_csv(
     skills_list = [s.strip() for s in skills.split(",") if s.strip()] if skills else None
     areas_list = [a.strip() for a in areas.split(",") if a.strip()] if areas else None
     types_list = [t.strip() for t in job_types.split(",") if t.strip()] if job_types else None
+    companies_list = [c.strip() for c in companies.split(",") if c.strip()] if companies else None
 
     results = search_listings(
         keyword=keyword,
@@ -112,6 +119,7 @@ def export_csv(
         skills=skills_list,
         areas=areas_list,
         job_types=types_list,
+        companies=companies_list,
         price_min=price_min if price_min and price_min > 0 else None,
         price_max=price_max if price_max and price_max < 200 else None,
         date_from=date_from,

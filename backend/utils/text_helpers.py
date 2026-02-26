@@ -574,6 +574,21 @@ def extract_company_from_sender(sender: str) -> str:
         if not _is_likely_person_name(dept_cleaned):
             name_part = dept_cleaned  # 更新して後続Stepで追加分解
 
+    # === Step 4b: 「の」区切りで会社名+人名を分離 ===
+    # クラウドワークスコンサルティングの大柿 → クラウドワークスコンサルティング
+    if "の" in name_part:
+        no_parts = name_part.rsplit("の", 1)
+        before_no = no_parts[0].strip()
+        after_no = no_parts[1].strip()
+        if (
+            before_no
+            and after_no
+            and len(before_no) >= 3
+            and _is_likely_person_name(after_no)
+            and not _is_likely_person_name(before_no)
+        ):
+            name_part = before_no
+
     # === Step 5: 全体が人名ならここでは空文字を返す ===
     # （Geminiの抽出結果 or ドメインにフォールバックする）
     if _is_likely_person_name(name_part):

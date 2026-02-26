@@ -14,6 +14,7 @@ export default function SearchPage() {
   // フィルター状態
   const [keyword, setKeyword] = useState("");
   const [keywordMode, setKeywordMode] = useState<"and" | "or">("and");
+  const [companySearch, setCompanySearch] = useState("");
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
   const [selectedJobTypes, setSelectedJobTypes] = useState<string[]>([]);
@@ -37,6 +38,7 @@ export default function SearchPage() {
       params.keyword = keyword;
       params.keyword_mode = keywordMode;
     }
+    if (companySearch.trim()) params.companies = companySearch.trim();
     if (selectedSkills.length) params.skills = selectedSkills.join(",");
     if (selectedAreas.length) params.areas = selectedAreas.join(",");
     if (selectedJobTypes.length) params.job_types = selectedJobTypes.join(",");
@@ -45,7 +47,7 @@ export default function SearchPage() {
     if (dateFrom) params.date_from = dateFrom;
     if (dateTo) params.date_to = dateTo;
     return params;
-  }, [keyword, keywordMode, selectedSkills, selectedAreas, selectedJobTypes, priceMin, priceMax, dateFrom, dateTo]);
+  }, [keyword, keywordMode, companySearch, selectedSkills, selectedAreas, selectedJobTypes, priceMin, priceMax, dateFrom, dateTo]);
 
   const doSearch = useCallback(() => {
     setLoading(true);
@@ -74,6 +76,7 @@ export default function SearchPage() {
   const clearFilters = () => {
     setKeyword("");
     setKeywordMode("and");
+    setCompanySearch("");
     setSelectedSkills([]);
     setSelectedAreas([]);
     setSelectedJobTypes([]);
@@ -130,6 +133,17 @@ export default function SearchPage() {
             OR
           </button>
         </div>
+
+        {/* 会社名 */}
+        <label className="block text-xs text-slate-500 mb-1">会社名</label>
+        <input
+          type="text"
+          value={companySearch}
+          onChange={(e) => setCompanySearch(e.target.value)}
+          placeholder="例: クラウドワークス"
+          className="w-full mb-3 px-2 py-1.5 border rounded text-sm"
+          style={{ borderColor: "var(--border)" }}
+        />
 
         {/* スキル */}
         <label className="block text-xs text-slate-500 mb-1">スキル</label>

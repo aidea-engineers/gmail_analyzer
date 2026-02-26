@@ -63,6 +63,7 @@ export interface SearchFilters {
   skills: string[];
   areas: string[];
   job_types: string[];
+  companies: string[];
 }
 
 export interface FetchStatus {

@@ -412,6 +412,7 @@ def search_listings(
     skills: list[str] | None = None,
     areas: list[str] | None = None,
     job_types: list[str] | None = None,
+    companies: list[str] | None = None,
     price_min: int | None = None,
     price_max: int | None = None,
     date_from: str | None = None,
@@ -465,6 +466,11 @@ def search_listings(
         type_conditions = " OR ".join("jl.job_type LIKE ?" for _ in job_types)
         query += f" AND ({type_conditions})"
         params.extend(f"%{t}%" for t in job_types)
+
+    if companies:
+        company_conditions = " OR ".join("jl.company_name LIKE ?" for _ in companies)
+        query += f" AND ({company_conditions})"
+        params.extend(f"%{c}%" for c in companies)
 
     if price_min is not None:
         query += " AND jl.unit_price_max >= ?"
@@ -648,6 +654,14 @@ def get_distinct_job_types() -> list[str]:
             "SELECT DISTINCT job_type FROM job_listings WHERE job_type != '' ORDER BY job_type"
         ).fetchall()
         return [r["job_type"] for r in rows]
+
+
+def get_distinct_companies() -> list[str]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT company_name FROM job_listings WHERE company_name != '' ORDER BY company_name"
+        ).fetchall()
+        return [r["company_name"] for r in rows]
 
 
 # --- Fetch Log ---
