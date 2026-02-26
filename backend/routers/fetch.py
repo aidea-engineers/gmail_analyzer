@@ -16,7 +16,7 @@ from core.database import (
     get_connection,
     get_fetch_logs,
     get_all_listings_with_sender,
-    update_listing_company_name,
+    batch_update_company_names,
 )
 from core.mock_data import generate_and_insert, clear_all_data, clear_mock_data
 from core.gmail_client import is_authenticated
@@ -353,7 +353,7 @@ def fix_company_names(
     # TODO: 修復完了後に認証を復元する
 
     listings = get_all_listings_with_sender()
-    updated = 0
+    updates = []
     for row in listings:
         sender = row.get("sender", "")
         old_name = row.get("company_name", "")
@@ -365,8 +365,9 @@ def fix_company_names(
 
         # 元と変わる場合のみ更新（空→空は除く）
         if new_name and new_name != old_name:
-            update_listing_company_name(row["id"], new_name)
-            updated += 1
+            updates.append((new_name, row["id"]))
+
+    updated = batch_update_company_names(updates)
 
     return {
         "message": f"会社名を{updated}件修復しました（全{len(listings)}件中）",

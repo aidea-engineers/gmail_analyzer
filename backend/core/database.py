@@ -708,13 +708,17 @@ def get_all_listings_with_sender() -> list[dict]:
         return [dict(r) for r in rows]
 
 
-def update_listing_company_name(listing_id: int, company_name: str):
-    """案件の会社名を更新する"""
+def batch_update_company_names(updates: list[tuple[str, int]]) -> int:
+    """会社名を一括更新する。updates = [(new_name, listing_id), ...]"""
+    if not updates:
+        return 0
     with get_connection() as conn:
-        conn.execute(
-            "UPDATE job_listings SET company_name = ? WHERE id = ?",
-            (company_name, listing_id),
-        )
+        for new_name, listing_id in updates:
+            conn.execute(
+                "UPDATE job_listings SET company_name = ? WHERE id = ?",
+                (new_name, listing_id),
+            )
+        return len(updates)
 
 
 def cleanup_stale_fetch_logs(stale_minutes: int = 10) -> int:
