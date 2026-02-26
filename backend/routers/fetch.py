@@ -350,46 +350,15 @@ def fix_company_names(
     authorization: str = Header(None),
 ):
     """既存案件の会社名を再抽出して修復する（担当者名・部署名を除去）"""
-    # TODO: 修復完了後に認証を復元する
+    if not Config.CRON_SECRET:
+        raise HTTPException(status_code=500, detail="CRON_SECRET is not configured")
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+    token = authorization[len("Bearer "):]
+    if token != Config.CRON_SECRET:
+        raise HTTPException(status_code=403, detail="Invalid token")
 
     listings = get_all_listings_with_sender()
-
-    # デバッグ: 変更があるもの + 最新20件を返す
-    debug_mode = True
-    if debug_mode:
-        changes = []
-        latest = []
-        for row in listings:
-            sender = row.get("sender", "")
-            old_name = row.get("company_name", "")
-            new_name = extract_company_from_sender(sender)
-            if not new_name:
-                new_name = _extract_domain_company(sender)
-            item = {
-                "id": row["id"],
-                "sender": sender[:100],
-                "old": old_name,
-                "new": new_name,
-            }
-            if new_name and new_name != old_name:
-                changes.append(item)
-        # 最新20件（ID降順）
-        sorted_listings = sorted(listings, key=lambda x: x["id"], reverse=True)
-        for row in sorted_listings[:20]:
-            sender = row.get("sender", "")
-            old_name = row.get("company_name", "")
-            new_name = extract_company_from_sender(sender)
-            if not new_name:
-                new_name = _extract_domain_company(sender)
-            latest.append({
-                "id": row["id"],
-                "sender": sender[:100],
-                "old": old_name,
-                "new": new_name,
-                "changed": new_name != old_name and bool(new_name),
-            })
-        return {"changes_count": len(changes), "changes_sample": changes[:10], "latest": latest, "total": len(listings)}
-
     updates = []
     for row in listings:
         sender = row.get("sender", "")
