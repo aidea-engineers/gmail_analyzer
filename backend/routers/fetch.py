@@ -385,18 +385,20 @@ def fix_company_names(
         domain_company = _extract_domain_company(sender)
 
         # 品質ベースで最良の会社名を選択
-        candidates = []
-        if sig_company:
-            candidates.append((_company_name_quality(sig_company), sig_company))
+        # (品質, ソース信頼度) — 同品質ならsender優先（署名は別企業を拾う可能性）
+        candidates = []  # [(quality, source_priority, name)]
         if sender_company:
-            candidates.append((_company_name_quality(sender_company), sender_company))
+            candidates.append((_company_name_quality(sender_company), 2, sender_company))
+        if sig_company:
+            candidates.append((_company_name_quality(sig_company), 1, sig_company))
         if domain_company:
-            candidates.append((_company_name_quality(domain_company), domain_company))
+            candidates.append((_company_name_quality(domain_company), -1, domain_company))
 
         if not candidates:
             continue
 
-        best_quality, best_name = max(candidates, key=lambda x: x[0])
+        best = max(candidates, key=lambda x: (x[0], x[1]))
+        best_quality, _, best_name = best
 
         # 新しい名前の品質が現在より高い場合のみ更新
         if best_name and best_quality > old_quality and best_name != old_name:

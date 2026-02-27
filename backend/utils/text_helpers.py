@@ -495,6 +495,60 @@ def _company_name_quality(name: str) -> int:
     return 1
 
 
+def _clean_signature_company(name: str) -> str:
+    """署名から抽出した会社名をクリーニングする。不正な場合は空文字を返す。"""
+    if not name:
+        return ""
+
+    # 装飾文字が含まれている場合は拒否（株式会社 ───── 等）
+    if re.search(r"[─━═▬―]", name):
+        return ""
+
+    # 法人格キーワードの後に拠点・支店名だけの場合は拒否
+    branch_suffixes = ["支社", "支店", "営業所", "事業所", "本社", "本店"]
+    for suffix in branch_suffixes:
+        if name.endswith(suffix):
+            cleaned = name[:-len(suffix)].strip()
+            # 法人格のみ残ったら拒否
+            if cleaned in ("株式会社", "有限会社", "合同会社", "一般社団法人", "合資会社"):
+                return ""
+            # 地名+支社だけだった場合も拒否（株式会社　神戸支社 → 株式会社　神戸 → 拒否）
+            for kw in ("株式会社", "有限会社", "合同会社", "一般社団法人", "合資会社"):
+                if cleaned.startswith(kw):
+                    after_kw = cleaned[len(kw):].strip()
+                    if len(after_kw) <= 3:  # 「神戸」等の短い地名
+                        return ""
+
+    # 「株式会社の○○です」パターンを拒否
+    for kw in ("株式会社", "有限会社", "合同会社"):
+        if kw in name:
+            idx = name.index(kw) + len(kw)
+            after = name[idx:].lstrip()
+            if after.startswith("の"):
+                return ""
+            # 「です」「ます」で終わる文は拒否
+            if after.endswith("です") or after.endswith("ます"):
+                return ""
+
+    # 法人格キーワードのみの場合は拒否
+    stripped = name.strip()
+    if stripped in ("株式会社", "有限会社", "合同会社", "一般社団法人", "合資会社"):
+        return ""
+
+    # 法人格キーワード後の実名部分が短すぎる場合は拒否
+    for kw in ("株式会社", "有限会社", "合同会社", "一般社団法人", "合資会社"):
+        if stripped.startswith(kw):
+            after = stripped[len(kw):].strip()
+            if after and len(after) < 2:
+                return ""
+        elif stripped.endswith(kw):
+            before = stripped[:-len(kw)].strip()
+            if before and len(before) < 2:
+                return ""
+
+    return name
+
+
 def extract_company_from_signature(body_text: str) -> str:
     """メール本文末尾の署名ブロックから会社名を抽出する
 
@@ -519,10 +573,13 @@ def extract_company_from_signature(body_text: str) -> str:
     search_lines = tail[sig_start:]
 
     # 法人格キーワードを含む行を探す
+    # 除外文字: スペース・括弧・句読点・装飾文字・パイプ・角括弧
+    _EXCL = r"\s（(）),、。｜|─━═▬―【】「」\[\]<>＜＞\n"
     corp_patterns = [
-        # 株式会社XXX / XXX株式会社
-        r"((?:株式会社|有限会社|合同会社|一般社団法人|合資会社)\s*[^\s（(,、。\n]{2,20})",
-        r"([^\s）),、。\n]{2,20}\s*(?:株式会社|有限会社|合同会社))",
+        # 株式会社XXX
+        rf"((?:株式会社|有限会社|合同会社|一般社団法人|合資会社)\s*[^{_EXCL}]{{2,20}})",
+        # XXX株式会社
+        rf"([^{_EXCL}]{{2,20}}\s*(?:株式会社|有限会社|合同会社))",
     ]
 
     for line in search_lines:
@@ -530,6 +587,10 @@ def extract_company_from_signature(body_text: str) -> str:
             m = re.search(pat, line)
             if m:
                 result = m.group(1).strip()
+                # クリーニング（支社名・装飾文字・「のXXです」等を除去）
+                result = _clean_signature_company(result)
+                if not result:
+                    continue
                 # 人名でないことを確認
                 if not _is_likely_person_name(result):
                     return result

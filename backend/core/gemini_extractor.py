@@ -145,24 +145,25 @@ def extract_from_email(
                 if listing.work_area:
                     listing.work_area = normalize_area(listing.work_area)
                 # 会社名の品質ベース優先順位:
-                # 各ソースの品質スコアを比較し、最も高いものを採用
-                # 署名(法人格付き) > sender(法人格付き) > Gemini結果 > sender(普通) > ドメイン
-                candidates = []
-                if sig_company:
-                    candidates.append((_company_name_quality(sig_company), sig_company))
+                # (品質スコア, ソース信頼度) のタプルで比較
+                # 同品質ならsender > 署名 > Gemini > ドメイン
+                # （署名は別企業の名前を拾う可能性があるため、senderを優先）
+                candidates = []  # [(quality, source_priority, name)]
                 if sender_company:
-                    candidates.append((_company_name_quality(sender_company), sender_company))
+                    candidates.append((_company_name_quality(sender_company), 2, sender_company))
+                if sig_company:
+                    candidates.append((_company_name_quality(sig_company), 1, sig_company))
                 gemini_company = listing.company_name or ""
                 if gemini_company:
-                    candidates.append((_company_name_quality(gemini_company), gemini_company))
+                    candidates.append((_company_name_quality(gemini_company), 0, gemini_company))
                 if domain_company:
-                    candidates.append((_company_name_quality(domain_company), domain_company))
+                    candidates.append((_company_name_quality(domain_company), -1, domain_company))
 
                 if candidates:
-                    # 品質スコアが最も高いものを選択
-                    best_quality, best_name = max(candidates, key=lambda x: x[0])
-                    if best_name:
-                        listing.company_name = best_name
+                    # (品質, ソース信頼度) で最良を選択
+                    best = max(candidates, key=lambda x: (x[0], x[1]))
+                    if best[2]:
+                        listing.company_name = best[2]
 
             return result.listings
 
