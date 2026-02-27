@@ -17,6 +17,7 @@ from utils.text_helpers import (
     normalize_area,
     extract_company_from_sender,
     extract_company_from_signature,
+    extract_company_from_greeting,
     _extract_domain_company,
     _company_name_quality,
     _normalize_corp_abbreviation,
@@ -137,6 +138,7 @@ def extract_from_email(
 
             # 後処理: スキル正規化 + エリア正規化 + 社名補正
             sender_company = extract_company_from_sender(sender)
+            greeting_company = extract_company_from_greeting(body_text)
             sig_company = extract_company_from_signature(body_text)
             domain_company = _extract_domain_company(sender)
             for listing in result.listings:
@@ -152,6 +154,8 @@ def extract_from_email(
                 candidates = []  # [(quality, source_priority, name)]
                 if sender_company:
                     candidates.append((_company_name_quality(sender_company), 2, sender_company))
+                if greeting_company:
+                    candidates.append((_company_name_quality(greeting_company), 1, greeting_company))
                 if sig_company:
                     candidates.append((_company_name_quality(sig_company), 1, sig_company))
                 gemini_company = listing.company_name or ""

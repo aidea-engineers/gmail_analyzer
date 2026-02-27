@@ -597,6 +597,50 @@ def _clean_signature_company(name: str) -> str:
     return name
 
 
+def extract_company_from_greeting(body_text: str) -> str:
+    """メール冒頭の自己紹介から会社名を抽出する
+
+    「株式会社ビジネクストの田中です」等のパターンから法人格付き会社名を取得。
+    冒頭10行に限定し、自己紹介パターンに続くもののみ対象。
+
+    Returns:
+        法人格付き会社名。見つからなければ空文字列。
+    """
+    if not body_text:
+        return ""
+
+    lines = body_text.splitlines()
+    # 冒頭10行のみ対象（案件先企業の混入を防ぐ）
+    head = lines[:10]
+
+    # 除外文字
+    _EXCL = r"\s（(）),、。｜|─━═▬―【】「」\[\]<>＜＞\n"
+
+    # 自己紹介パターン: 「(株式会社XXX)の○○です/と申します/でございます」
+    # または「(株式会社XXX)です」
+    greeting_patterns = [
+        # 株式会社XXXの田中です / 株式会社XXX 営業部の田中です
+        rf"((?:株式会社|有限会社|合同会社|一般社団法人|合資会社)\s*[^{_EXCL}]{{2,20}})(?:の|　の|\s+の|\s+営業[^\s]*の|\s+[^\s]*部の).{{1,10}}(?:です|と申します|でございます|より)",
+        rf"([^{_EXCL}]{{2,20}}\s*(?:株式会社|有限会社|合同会社))(?:の|　の|\s+の|\s+営業[^\s]*の|\s+[^\s]*部の).{{1,10}}(?:です|と申します|でございます|より)",
+        # 株式会社XXXです / 株式会社XXXと申します
+        rf"((?:株式会社|有限会社|合同会社|一般社団法人|合資会社)\s*[^{_EXCL}]{{2,20}})(?:です|と申します|でございます)",
+        rf"([^{_EXCL}]{{2,20}}\s*(?:株式会社|有限会社|合同会社))(?:です|と申します|でございます)",
+    ]
+
+    for line in head:
+        for pat in greeting_patterns:
+            m = re.search(pat, line)
+            if m:
+                result = m.group(1).strip()
+                result = _clean_signature_company(result)
+                if not result:
+                    continue
+                if not _is_likely_person_name(result):
+                    return result
+
+    return ""
+
+
 def extract_company_from_signature(body_text: str) -> str:
     """メール本文末尾の署名ブロックから会社名を抽出する
 

@@ -24,6 +24,7 @@ from core.gmail_client import is_authenticated
 from utils.text_helpers import (
     extract_company_from_sender,
     extract_company_from_signature,
+    extract_company_from_greeting,
     _extract_domain_company,
     _company_name_quality,
     _normalize_corp_abbreviation,
@@ -382,6 +383,7 @@ def fix_company_names(
 
         # 各ソースから会社名を抽出
         sender_company = extract_company_from_sender(sender)
+        greeting_company = extract_company_from_greeting(body_text)
         sig_company = extract_company_from_signature(body_text)
         domain_company = _extract_domain_company(sender)
 
@@ -390,6 +392,8 @@ def fix_company_names(
         candidates = []  # [(quality, source_priority, name)]
         if sender_company:
             candidates.append((_company_name_quality(sender_company), 2, sender_company))
+        if greeting_company:
+            candidates.append((_company_name_quality(greeting_company), 1, greeting_company))
         if sig_company:
             candidates.append((_company_name_quality(sig_company), 1, sig_company))
         if domain_company:
