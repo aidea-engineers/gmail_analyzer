@@ -472,6 +472,39 @@ def _is_low_quality_company_name(name: str) -> bool:
     return False
 
 
+def _is_defective_company_name(name: str) -> bool:
+    """法人格付きだが壊れた会社名を検出する（品質0にする対象）"""
+    if not name:
+        return False
+    # 装飾文字（───, ━━━ 等）を含む
+    if re.search(r"[─━═▬―]{2,}", name):
+        return True
+    # ｜/| 区切りのタグライン（株式会社アースリンク｜システムインテグレーション）
+    if "｜" in name or "|" in name:
+        return True
+    # 【】括弧（株式会社【略称：ARI】）
+    if "【" in name or "】" in name:
+        return True
+    # 法人格の後に「の」+ テキスト（株式会社の横谷です）
+    for kw in ("株式会社", "有限会社", "合同会社"):
+        if kw in name:
+            idx = name.index(kw) + len(kw)
+            after = name[idx:].lstrip()
+            if after.startswith("の"):
+                return True
+            if after.endswith("です") or after.endswith("ます"):
+                return True
+    # 法人格 + 支社/支店のみ（株式会社　神戸支社）
+    for suffix in ("支社", "支店", "営業所", "事業所"):
+        if name.endswith(suffix):
+            for kw in ("株式会社", "有限会社", "合同会社", "一般社団法人", "合資会社"):
+                if kw in name:
+                    between = name[name.index(kw) + len(kw):name.rindex(suffix)].strip()
+                    if len(between) <= 3:
+                        return True
+    return False
+
+
 def _company_name_quality(name: str) -> int:
     """会社名の品質スコアを返す（0〜4、高いほど良い）
 
@@ -479,9 +512,11 @@ def _company_name_quality(name: str) -> int:
     3: CJK文字を含む3文字以上の名前（カタカナ社名等）
     2: 英数字3文字以上で大文字を含む（IDH, AGEST等）
     1: 英数字のみ（小文字含む、ドメイン断片の可能性あり）
-    0: 低品質（短すぎ、記号混入等）
+    0: 低品質（短すぎ、記号混入、壊れた名前等）
     """
     if not name or _is_low_quality_company_name(name):
+        return 0
+    if _is_defective_company_name(name):
         return 0
     if _contains_corp_keyword(name):
         return 4
