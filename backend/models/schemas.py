@@ -86,6 +86,7 @@ class EngineerCreate(BaseModel):
     preferred_areas: str = Field("", description="希望エリア（カンマ区切り）")
     available_from: str = Field("", description="稼働可能日（YYYY-MM-DD）")
     notes: str = Field("", description="備考")
+    processes: str = Field("", description="対応工程（カンマ区切り）")
 
 
 class EngineerUpdate(BaseModel):
@@ -100,6 +101,7 @@ class EngineerUpdate(BaseModel):
     preferred_areas: Optional[str] = None
     available_from: Optional[str] = None
     notes: Optional[str] = None
+    processes: Optional[str] = None
 
 
 class AssignmentCreate(BaseModel):

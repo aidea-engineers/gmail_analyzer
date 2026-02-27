@@ -20,6 +20,7 @@ from core.database import (
     search_engineers,
 )
 from models.schemas import ProposalCreate, ProposalUpdate
+from utils.text_helpers import categorize_skills
 
 router = APIRouter(prefix="/api/matching", tags=["matching"])
 
@@ -61,6 +62,9 @@ def engineers_for_listing(listing_id: int, limit: int = Query(20, ge=1, le=100))
         matches = match_engineers_for_listing(listing_id, limit=limit)
         for m in matches:
             m["engineer"] = _serialize_datetime(m["engineer"])
+            m["engineer"]["categorized_skills"] = categorize_skills(
+                m["engineer"].get("skills", [])
+            )
             if m["proposal"]:
                 m["proposal"] = _serialize_datetime(m["proposal"])
         return {"matches": matches}
@@ -76,6 +80,9 @@ def listings_for_engineer(engineer_id: int, limit: int = Query(20, ge=1, le=100)
         matches = match_listings_for_engineer(engineer_id, limit=limit)
         for m in matches:
             m["listing"] = _serialize_listing(m["listing"])
+            m["listing"]["categorized_skills"] = categorize_skills(
+                m["listing"].get("required_skills", [])
+            )
             if m["proposal"]:
                 m["proposal"] = _serialize_datetime(m["proposal"])
         return {"matches": matches}

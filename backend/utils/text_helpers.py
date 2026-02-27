@@ -119,6 +119,49 @@ def normalize_skill_name(skill: str) -> str:
     return SKILL_NORMALIZATION.get(key, skill.strip())
 
 
+# --- スキルカテゴリ分類 ---
+
+SKILL_CATEGORY: dict[str, str] = {
+    # 言語
+    "Java": "言語", "Python": "言語", "TypeScript": "言語", "JavaScript": "言語",
+    "Go": "言語", "C#": "言語", "Ruby": "言語", "PHP": "言語", "Swift": "言語",
+    "Kotlin": "言語", "Rust": "言語", "Scala": "言語", "C++": "言語", "C": "言語",
+    "R": "言語", "Perl": "言語", "Shell": "言語", "VBA": "言語", "COBOL": "言語",
+    "SQL": "言語",
+    # フレームワーク
+    "React": "FW", "Vue.js": "FW", "Angular": "FW", "Next.js": "FW", "Nuxt.js": "FW",
+    "Node.js": "FW", "Spring Boot": "FW", "Django": "FW", "Flask": "FW",
+    "Ruby on Rails": "FW", "Laravel": "FW", "Express": "FW", "Flutter": "FW",
+    ".NET": "FW",
+    # インフラ/クラウド
+    "AWS": "インフラ", "Azure": "インフラ", "GCP": "インフラ", "Docker": "インフラ",
+    "Kubernetes": "インフラ", "Terraform": "インフラ", "Linux": "インフラ",
+    "Ansible": "インフラ", "Jenkins": "インフラ",
+    # DB
+    "MySQL": "DB", "PostgreSQL": "DB", "Oracle": "DB", "MongoDB": "DB",
+    "Redis": "DB", "SQL Server": "DB", "DynamoDB": "DB", "Elasticsearch": "DB",
+}
+
+
+def categorize_skills(skill_names: list[str]) -> dict[str, list[str]]:
+    """スキル名リストをカテゴリ別に分類する。
+
+    Returns:
+        {"言語": [...], "FW": [...], "インフラ": [...], "DB": [...], "その他": [...]}
+        空のカテゴリは含まない。
+    """
+    result: dict[str, list[str]] = {}
+    for sk in skill_names:
+        cat = SKILL_CATEGORY.get(sk, "その他")
+        result.setdefault(cat, []).append(sk)
+    return result
+
+
+# --- 工程（プロセス）選択肢 ---
+
+PROCESS_OPTIONS = ["要件定義", "基本設計", "詳細設計", "実装", "テスト", "運用保守"]
+
+
 # --- エリア正規化 ---
 
 # 東京23区内の主要地名・駅名

@@ -23,6 +23,7 @@ import type {
   EngineerAssignment,
   EngineerForm,
   CsvImportResult,
+  CategorizedSkills,
 } from "@/types";
 
 const EMPTY_FORM: EngineerForm = {
@@ -36,7 +37,18 @@ const EMPTY_FORM: EngineerForm = {
   preferred_areas: "",
   available_from: "",
   notes: "",
+  processes: [],
 };
+
+const SKILL_CATEGORY_COLORS: Record<string, string> = {
+  "言語": "bg-blue-100 text-blue-700",
+  "FW": "bg-purple-100 text-purple-700",
+  "インフラ": "bg-orange-100 text-orange-700",
+  "DB": "bg-green-100 text-green-700",
+  "その他": "bg-gray-100 text-gray-600",
+};
+
+const SKILL_CATEGORY_ORDER = ["言語", "FW", "インフラ", "DB", "その他"];
 
 const STATUS_COLORS: Record<string, string> = {
   "待機中": "bg-green-100 text-green-800",
@@ -66,6 +78,7 @@ export default function EngineersPage() {
   // 展開・編集
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<EngineerDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState<EngineerForm>({ ...EMPTY_FORM });
@@ -134,14 +147,19 @@ export default function EngineersPage() {
     if (expandedId === id) {
       setExpandedId(null);
       setDetail(null);
+      setDetailLoading(false);
       return;
     }
     setExpandedId(id);
+    setDetail(null);
+    setDetailLoading(true);
     try {
       const d = await getEngineerDetail(id);
       setDetail(d);
     } catch {
       setDetail(null);
+    } finally {
+      setDetailLoading(false);
     }
   };
 
@@ -184,6 +202,7 @@ export default function EngineersPage() {
       preferred_areas: eng.preferred_areas,
       available_from: eng.available_from,
       notes: eng.notes,
+      processes: eng.processes ? eng.processes.split(",").map(s => s.trim()).filter(Boolean) : [],
     });
     setFormError("");
     setShowForm(true);
@@ -217,6 +236,7 @@ export default function EngineersPage() {
       preferred_areas: form.preferred_areas,
       available_from: form.available_from,
       notes: form.notes,
+      processes: form.processes.join(","),
     };
 
     try {
@@ -641,6 +661,26 @@ export default function EngineersPage() {
                   />
                 </div>
                 <div className="md:col-span-2">
+                  <label className="block text-xs text-slate-500 mb-1">対応工程</label>
+                  <div className="flex flex-wrap gap-3">
+                    {(filters?.process_options ?? ["要件定義", "基本設計", "詳細設計", "実装", "テスト", "運用保守"]).map((proc) => (
+                      <label key={proc} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={form.processes.includes(proc)}
+                          onChange={() => {
+                            const next = form.processes.includes(proc)
+                              ? form.processes.filter(p => p !== proc)
+                              : [...form.processes, proc];
+                            setForm({ ...form, processes: next });
+                          }}
+                        />
+                        {proc}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="md:col-span-2">
                   <label className="block text-xs text-slate-500 mb-1">備考</label>
                   <textarea
                     value={form.notes}
@@ -715,8 +755,15 @@ export default function EngineersPage() {
                         {eng.status}
                       </span>
                     </span>
-                    <span className="text-xs text-slate-600 truncate">
-                      {eng.skills.join(", ")}
+                    <span className="flex flex-wrap gap-0.5 overflow-hidden max-h-6">
+                      {eng.skills.map((sk) => {
+                        const cat = Object.entries(eng.categorized_skills || {}).find(([, skills]) => skills.includes(sk))?.[0] || "その他";
+                        return (
+                          <span key={sk} className={`px-1 py-0 text-[10px] rounded ${SKILL_CATEGORY_COLORS[cat] || SKILL_CATEGORY_COLORS["その他"]}`}>
+                            {sk}
+                          </span>
+                        );
+                      })}
                     </span>
                     <span className="text-xs text-slate-600">
                       {eng.experience_years != null ? `${eng.experience_years}年` : "-"}
@@ -735,7 +782,19 @@ export default function EngineersPage() {
                   </div>
 
                   {/* 展開詳細 */}
-                  {expandedId === eng.id && detail && (
+                  {expandedId === eng.id && detailLoading && (
+                    <div
+                      className="mx-2 mb-2 p-6 rounded-b-lg border border-t-0 flex items-center justify-center"
+                      style={{ background: "#f8fafc", borderColor: "var(--primary)" }}
+                    >
+                      <svg className="animate-spin h-6 w-6 text-blue-500" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      <span className="ml-2 text-sm text-slate-500">読み込み中...</span>
+                    </div>
+                  )}
+                  {expandedId === eng.id && detail && !detailLoading && (
                     <div
                       className="mx-2 mb-2 p-4 rounded-b-lg border border-t-0"
                       style={{
@@ -781,12 +840,37 @@ export default function EngineersPage() {
                             <span className="font-semibold">希望エリア:</span>{" "}
                             {detail.preferred_areas || "未記入"}
                           </p>
-                          <p>
-                            <span className="font-semibold">スキル:</span>{" "}
-                            {detail.skills.join(", ") || "未記入"}
-                          </p>
                         </div>
                       </div>
+
+                      {/* カテゴリ別スキル表示 */}
+                      <div className="mb-3">
+                        <span className="font-semibold text-sm">スキル:</span>
+                        {detail.categorized_skills && Object.keys(detail.categorized_skills).length > 0 ? (
+                          <div className="mt-1 space-y-1">
+                            {SKILL_CATEGORY_ORDER.filter(cat => detail.categorized_skills?.[cat]?.length).map(cat => (
+                              <div key={cat} className="flex items-center gap-1 flex-wrap">
+                                <span className="text-xs text-slate-400 w-12 shrink-0">{cat}:</span>
+                                {detail.categorized_skills[cat].map(sk => (
+                                  <span key={sk} className={`px-1.5 py-0.5 text-xs rounded ${SKILL_CATEGORY_COLORS[cat]}`}>
+                                    {sk}
+                                  </span>
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-slate-500 ml-1">未記入</span>
+                        )}
+                      </div>
+
+                      {/* 対応工程 */}
+                      {detail.processes && (
+                        <p className="text-sm mb-3">
+                          <span className="font-semibold">対応工程:</span>{" "}
+                          {detail.processes.split(",").map(p => p.trim()).filter(Boolean).join(", ")}
+                        </p>
+                      )}
                       {detail.notes && (
                         <p className="text-sm mb-3">
                           <span className="font-semibold">備考:</span> {detail.notes}

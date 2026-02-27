@@ -24,7 +24,7 @@ from core.database import (
     delete_assignment,
 )
 from models.schemas import EngineerCreate, EngineerUpdate, AssignmentCreate
-from utils.text_helpers import normalize_skill_name
+from utils.text_helpers import normalize_skill_name, categorize_skills, PROCESS_OPTIONS
 
 router = APIRouter(prefix="/api/engineers", tags=["engineers"])
 
@@ -50,6 +50,7 @@ def engineer_filters():
             "skills": get_distinct_engineer_skills(),
             "areas": get_distinct_engineer_areas(),
             "statuses": ["待機中", "稼働中", "面談中", "休止中"],
+            "process_options": PROCESS_OPTIONS,
         }
     except Exception as e:
         logger.exception("engineer_filters error")
@@ -82,6 +83,7 @@ def engineer_list(
 
         engineers = []
         for r in results:
+            skills = r.get("skills", [])
             engineers.append({
                 "id": r["id"],
                 "name": r["name"],
@@ -93,7 +95,9 @@ def engineer_list(
                 "preferred_areas": r.get("preferred_areas", ""),
                 "available_from": r.get("available_from", ""),
                 "notes": r.get("notes", ""),
-                "skills": r.get("skills", []),
+                "skills": skills,
+                "processes": r.get("processes", ""),
+                "categorized_skills": categorize_skills(skills),
                 "created_at": str(r.get("created_at", "")),
                 "updated_at": str(r.get("updated_at", "")),
             })
@@ -132,7 +136,7 @@ def engineer_export(
     writer.writerow([
         "名前", "ステータス", "スキル", "経験年数",
         "現在単価(万円)", "希望単価下限(万円)", "希望単価上限(万円)",
-        "希望エリア", "稼働可能日", "備考",
+        "希望エリア", "稼働可能日", "対応工程", "備考",
     ])
 
     for r in results:
@@ -146,6 +150,7 @@ def engineer_export(
             r.get("desired_price_max") or "",
             r.get("preferred_areas", ""),
             r.get("available_from", ""),
+            r.get("processes", ""),
             r.get("notes", ""),
         ])
 
@@ -210,6 +215,7 @@ async def engineer_import_csv(file: UploadFile = File(...)):
             "status": (row.get("ステータス") or row.get("status") or "待機中").strip(),
             "preferred_areas": (row.get("希望エリア") or row.get("preferred_areas") or "").strip(),
             "available_from": (row.get("稼働可能日") or row.get("available_from") or "").strip(),
+            "processes": (row.get("対応工程") or row.get("processes") or "").strip(),
             "notes": (row.get("備考") or row.get("notes") or "").strip(),
         }
 
@@ -252,6 +258,7 @@ def get_engineer_detail(eng_id: int):
     for a in eng.get("assignments", []):
         if a.get("created_at"):
             a["created_at"] = str(a["created_at"])
+    eng["categorized_skills"] = categorize_skills(eng.get("skills", []))
     return eng
 
 

@@ -163,6 +163,7 @@ CREATE TABLE IF NOT EXISTS engineers (
     preferred_areas TEXT DEFAULT '',
     available_from  TEXT DEFAULT '',
     notes           TEXT DEFAULT '',
+    processes       TEXT DEFAULT '',
     created_at      TIMESTAMP DEFAULT NOW(),
     updated_at      TIMESTAMP DEFAULT NOW()
 );
@@ -292,6 +293,7 @@ CREATE TABLE IF NOT EXISTS engineers (
     preferred_areas TEXT DEFAULT '',
     available_from  TEXT DEFAULT '',
     notes           TEXT DEFAULT '',
+    processes       TEXT DEFAULT '',
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -370,6 +372,14 @@ def init_db():
             conn.commit()
         except Exception:
             conn.rollback()  # カラムが既に存在する場合は無視
+        # マイグレーション: engineers.processes カラム追加
+        try:
+            conn.execute(
+                "ALTER TABLE engineers ADD COLUMN processes TEXT DEFAULT ''"
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
 
 
 # --- Email CRUD ---
@@ -958,8 +968,8 @@ def insert_engineer(data: dict) -> int:
         sql = """INSERT INTO engineers
                  (name, experience_years, current_price,
                   desired_price_min, desired_price_max,
-                  status, preferred_areas, available_from, notes)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                  status, preferred_areas, available_from, notes, processes)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
         params = (
             data["name"],
             data.get("experience_years"),
@@ -970,6 +980,7 @@ def insert_engineer(data: dict) -> int:
             data.get("preferred_areas", ""),
             data.get("available_from", ""),
             data.get("notes", ""),
+            data.get("processes", ""),
         )
         if conn.is_pg:
             cursor = conn.execute(sql + " RETURNING id", params)
@@ -999,6 +1010,7 @@ def update_engineer(eng_id: int, data: dict) -> bool:
             "desired_price_max": "desired_price_max",
             "status": "status", "preferred_areas": "preferred_areas",
             "available_from": "available_from", "notes": "notes",
+            "processes": "processes",
         }
         for key, col in field_map.items():
             if key in data:

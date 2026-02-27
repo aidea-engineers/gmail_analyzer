@@ -52,6 +52,7 @@ export interface JobListing {
   sender: string;
   received_at: string;
   created_at: string;
+  categorized_skills?: CategorizedSkills;
 }
 
 export interface ListingsResponse {
@@ -124,6 +125,8 @@ export interface JobProgress {
 
 /* Engineer */
 
+export type CategorizedSkills = Record<string, string[]>;
+
 export interface Engineer {
   id: number;
   name: string;
@@ -136,6 +139,8 @@ export interface Engineer {
   available_from: string;
   notes: string;
   skills: string[];
+  processes: string;
+  categorized_skills: CategorizedSkills;
   created_at: string;
   updated_at: string;
 }
@@ -171,6 +176,7 @@ export interface EngineerFilters {
   skills: string[];
   areas: string[];
   statuses: string[];
+  process_options: string[];
 }
 
 export interface EngineersResponse {
@@ -189,6 +195,7 @@ export interface EngineerForm {
   preferred_areas: string;
   available_from: string;
   notes: string;
+  processes: string[];
 }
 
 export interface CsvImportResult {

@@ -20,6 +20,7 @@ import type {
   EngineerMatchResult,
   MatchProposal,
   JobListing,
+  CategorizedSkills,
 } from "@/types";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -31,6 +32,22 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const STATUSES = ["候補", "提案済み", "面談中", "成約", "見送り"];
+
+const SKILL_CAT_COLORS: Record<string, string> = {
+  "言語": "bg-blue-100 text-blue-700",
+  "FW": "bg-purple-100 text-purple-700",
+  "インフラ": "bg-orange-100 text-orange-700",
+  "DB": "bg-green-100 text-green-700",
+  "その他": "bg-gray-100 text-gray-600",
+};
+
+function getSkillBadgeClass(skill: string, categorized?: CategorizedSkills): string {
+  if (!categorized) return "bg-slate-100 text-slate-600";
+  for (const [cat, skills] of Object.entries(categorized)) {
+    if (skills.includes(skill)) return SKILL_CAT_COLORS[cat] || SKILL_CAT_COLORS["その他"];
+  }
+  return SKILL_CAT_COLORS["その他"];
+}
 
 function ScoreBar({ score }: { score: number }) {
   const color =
@@ -336,7 +353,7 @@ function MatchingContent() {
                           {m.listing.required_skills.map((sk) => (
                             <span
                               key={sk}
-                              className="px-1.5 py-0.5 text-xs bg-slate-100 text-slate-600 rounded"
+                              className={`px-1.5 py-0.5 text-xs rounded ${getSkillBadgeClass(sk, m.listing.categorized_skills)}`}
                             >
                               {sk}
                             </span>
@@ -449,7 +466,7 @@ function MatchingContent() {
                           {m.engineer.skills.map((sk) => (
                             <span
                               key={sk}
-                              className="px-1.5 py-0.5 text-xs bg-slate-100 text-slate-600 rounded"
+                              className={`px-1.5 py-0.5 text-xs rounded ${getSkillBadgeClass(sk, m.engineer.categorized_skills)}`}
                             >
                               {sk}
                             </span>
