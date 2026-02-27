@@ -16,7 +16,9 @@ from utils.text_helpers import (
     normalize_skill_name,
     normalize_area,
     extract_company_from_sender,
+    extract_company_from_signature,
     _extract_domain_company,
+    _company_name_quality,
 )
 
 logger = logging.getLogger(__name__)
@@ -36,9 +38,11 @@ EXTRACTION_PROMPT = """あなたはSES（システムエンジニアリングサ
 案件でない場合はis_job_listing=falseの要素を1つだけ返してください。
 
 ## company_name（会社名）＝メール送信元の企業名
-**メールを送ってきた企業（送信者の所属企業）の名前のみを記載すること。**
+**メールを送ってきた企業（送信者の所属企業）の正式名称を記載すること。**
 送信者名「{sender}」から企業名を抽出して使用する。
-送信者名が人名のみの場合（例:「田中 太郎」）は、メール本文末尾の署名欄・フッターから送信者の所属企業名を探して記載すること。
+**必ず「株式会社」「合同会社」等の法人格を含めた正式名称で記載すること。**
+例: ○「株式会社ABC」 ✕「ABC」 ✕「abc」
+送信者名がドメイン断片（例: ses, proud-g, code-d）や人名のみの場合は、メール本文末尾の署名欄・フッターから送信者の所属企業名（法人格付き）を探して記載すること。
 本文中に記載された案件先・クライアント企業名は使用しないこと（それはproject_detailsに含める）。
 「○○サービス運営企業」のような案件先の説明をcompany_nameに入れてはいけない。
 **必ず送信者の企業名のみを記載すること。担当者名・部署名は含めないこと。**
@@ -105,7 +109,8 @@ def extract_from_email(
         logger.error("GEMINI_API_KEY が設定されていません")
         return None
 
-    cleaned_body = clean_email_body(body_text)
+    # 署名を保持してGeminiに渡す（署名から会社名を抽出させるため）
+    cleaned_body = clean_email_body(body_text, keep_signature=True)
     truncated_body = truncate_for_gemini(cleaned_body)
 
     prompt = EXTRACTION_PROMPT.format(
@@ -131,6 +136,7 @@ def extract_from_email(
 
             # 後処理: スキル正規化 + エリア正規化 + 社名補正
             sender_company = extract_company_from_sender(sender)
+            sig_company = extract_company_from_signature(body_text)
             domain_company = _extract_domain_company(sender)
             for listing in result.listings:
                 listing.required_skills = [
@@ -138,15 +144,25 @@ def extract_from_email(
                 ]
                 if listing.work_area:
                     listing.work_area = normalize_area(listing.work_area)
-                # 会社名の優先順位:
-                # 1. sender解析で会社名が取れた → それを使用
-                # 2. sender解析が空 → Geminiの抽出結果を使用（署名欄等から取得）
-                # 3. Geminiも空 → ドメインから推測
+                # 会社名の品質ベース優先順位:
+                # 各ソースの品質スコアを比較し、最も高いものを採用
+                # 署名(法人格付き) > sender(法人格付き) > Gemini結果 > sender(普通) > ドメイン
+                candidates = []
+                if sig_company:
+                    candidates.append((_company_name_quality(sig_company), sig_company))
                 if sender_company:
-                    listing.company_name = sender_company
-                elif not listing.company_name:
-                    if domain_company:
-                        listing.company_name = domain_company
+                    candidates.append((_company_name_quality(sender_company), sender_company))
+                gemini_company = listing.company_name or ""
+                if gemini_company:
+                    candidates.append((_company_name_quality(gemini_company), gemini_company))
+                if domain_company:
+                    candidates.append((_company_name_quality(domain_company), domain_company))
+
+                if candidates:
+                    # 品質スコアが最も高いものを選択
+                    best_quality, best_name = max(candidates, key=lambda x: x[0])
+                    if best_name:
+                        listing.company_name = best_name
 
             return result.listings
 

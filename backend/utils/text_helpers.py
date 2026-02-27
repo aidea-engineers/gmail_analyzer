@@ -14,8 +14,13 @@ def strip_html(html: str) -> str:
     return "\n".join(line for line in lines if line)
 
 
-def clean_email_body(text: str) -> str:
-    """メール本文をクリーニング（引用・署名除去、空白正規化）"""
+def clean_email_body(text: str, keep_signature: bool = False) -> str:
+    """メール本文をクリーニング（引用除去、空白正規化）
+
+    Args:
+        text: メール本文
+        keep_signature: Trueなら署名ブロック（-- 以降）を保持する
+    """
     if not text:
         return ""
     lines = text.splitlines()
@@ -24,8 +29,8 @@ def clean_email_body(text: str) -> str:
         # 引用行を除去
         if line.strip().startswith(">"):
             continue
-        # 署名区切り以降を除去
-        if line.strip() == "--" or line.strip() == "-- ":
+        # 署名区切り以降を除去（keep_signature=Falseの場合のみ）
+        if not keep_signature and (line.strip() == "--" or line.strip() == "-- "):
             break
         cleaned.append(line)
 
@@ -447,6 +452,91 @@ def _clean_corp_result(result: str) -> str:
     return result
 
 
+def _is_low_quality_company_name(name: str) -> bool:
+    """ドメイン断片・短すぎ・記号混入など低品質な会社名を検出する"""
+    if not name:
+        return True
+    name = name.strip()
+    # 2文字以下（BN, SI 等）
+    if len(name) <= 2:
+        return True
+    # 英小文字+ハイフンのみ（ドメイン断片: ses, proud-g, code-d, sense-si, conviction-inc）
+    if re.match(r"^[a-z0-9]+(-[a-z0-9]+)*$", name):
+        return True
+    # 引用符や山括弧が残っている（Trinity" <k 等）
+    if re.search(r'[<>"\'`]', name):
+        return True
+    # @を含む（メールアドレスの一部）
+    if "@" in name:
+        return True
+    return False
+
+
+def _company_name_quality(name: str) -> int:
+    """会社名の品質スコアを返す（0〜4、高いほど良い）
+
+    4: 法人格付き（株式会社XXX等）— 最高品質
+    3: CJK文字を含む3文字以上の名前（カタカナ社名等）
+    2: 英数字3文字以上で大文字を含む（IDH, AGEST等）
+    1: 英数字のみ（小文字含む、ドメイン断片の可能性あり）
+    0: 低品質（短すぎ、記号混入等）
+    """
+    if not name or _is_low_quality_company_name(name):
+        return 0
+    if _contains_corp_keyword(name):
+        return 4
+    # CJK文字を含む
+    if re.search(rf"{_JP_CHAR}", name):
+        return 3
+    # 英数字で大文字を含む（IDH, AGEST等）
+    if re.match(r"^[A-Za-z0-9\-_.&\s]+$", name) and re.search(r"[A-Z]", name):
+        return 2
+    # それ以外（英数字小文字のみ等）
+    return 1
+
+
+def extract_company_from_signature(body_text: str) -> str:
+    """メール本文末尾の署名ブロックから会社名を抽出する
+
+    Returns:
+        法人格付き会社名。見つからなければ空文字列。
+    """
+    if not body_text:
+        return ""
+
+    lines = body_text.splitlines()
+    # 末尾50行を対象
+    tail = lines[-50:] if len(lines) > 50 else lines
+
+    # 署名区切り（-- や ━━ 等）以降を優先的に探す
+    sig_start = 0
+    for i, line in enumerate(tail):
+        stripped = line.strip()
+        if stripped in ("--", "-- ") or re.match(r"^[-=━─]{3,}", stripped):
+            sig_start = i
+            break
+
+    search_lines = tail[sig_start:]
+
+    # 法人格キーワードを含む行を探す
+    corp_patterns = [
+        # 株式会社XXX / XXX株式会社
+        r"((?:株式会社|有限会社|合同会社|一般社団法人|合資会社)\s*[^\s（(,、。\n]{2,20})",
+        r"([^\s）),、。\n]{2,20}\s*(?:株式会社|有限会社|合同会社))",
+    ]
+
+    for line in search_lines:
+        for pat in corp_patterns:
+            m = re.search(pat, line)
+            if m:
+                result = m.group(1).strip()
+                # 人名でないことを確認
+                if not _is_likely_person_name(result):
+                    return result
+
+    return ""
+
+
 def extract_company_from_sender(sender: str) -> str:
     """メール送信者のFromヘッダーから会社名のみを抽出する（担当者名・部署名は除外）
 
@@ -622,6 +712,8 @@ def extract_company_from_sender(sender: str) -> str:
         if len(suffix) >= 3:
             return suffix
 
-    # === Step 9: そのまま返す ===
-    # conviction-inc → conviction-inc
+    # === Step 9: 品質チェック ===
+    # 低品質な名前（ドメイン断片等）は空文字を返し、Gemini/署名にフォールバック
+    if _is_low_quality_company_name(name_part):
+        return ""
     return name_part

@@ -740,6 +740,17 @@ def get_all_listings_with_sender() -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def get_all_listings_with_sender_and_body() -> list[dict]:
+    """全案件とそのメール送信者・本文を取得する（会社名修復v4用）"""
+    with get_connection() as conn:
+        rows = conn.execute(
+            """SELECT jl.id, jl.company_name, e.sender, e.body_text
+               FROM job_listings jl
+               JOIN emails e ON jl.email_id = e.id"""
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 def batch_update_company_names(updates: list[tuple[str, int]]) -> int:
     """会社名を一括更新する。updates = [(new_name, listing_id), ...]"""
     if not updates:

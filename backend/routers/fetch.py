@@ -16,11 +16,17 @@ from core.database import (
     get_connection,
     get_fetch_logs,
     get_all_listings_with_sender,
+    get_all_listings_with_sender_and_body,
     batch_update_company_names,
 )
 from core.mock_data import generate_and_insert, clear_all_data, clear_mock_data
 from core.gmail_client import is_authenticated
-from utils.text_helpers import extract_company_from_sender, _extract_domain_company
+from utils.text_helpers import (
+    extract_company_from_sender,
+    extract_company_from_signature,
+    _extract_domain_company,
+    _company_name_quality,
+)
 from config import Config
 
 logger = logging.getLogger(__name__)
@@ -365,18 +371,36 @@ def fix_company_names(
     if token != Config.CRON_SECRET:
         raise HTTPException(status_code=403, detail="Invalid token")
 
-    listings = get_all_listings_with_sender()
+    listings = get_all_listings_with_sender_and_body()
     updates = []
     for row in listings:
         sender = row.get("sender", "")
+        body_text = row.get("body_text", "")
         old_name = row.get("company_name", "")
-        new_name = extract_company_from_sender(sender)
+        old_quality = _company_name_quality(old_name)
 
-        if not new_name:
-            new_name = _extract_domain_company(sender)
+        # 各ソースから会社名を抽出
+        sender_company = extract_company_from_sender(sender)
+        sig_company = extract_company_from_signature(body_text)
+        domain_company = _extract_domain_company(sender)
 
-        if new_name and new_name != old_name:
-            updates.append((new_name, row["id"]))
+        # 品質ベースで最良の会社名を選択
+        candidates = []
+        if sig_company:
+            candidates.append((_company_name_quality(sig_company), sig_company))
+        if sender_company:
+            candidates.append((_company_name_quality(sender_company), sender_company))
+        if domain_company:
+            candidates.append((_company_name_quality(domain_company), domain_company))
+
+        if not candidates:
+            continue
+
+        best_quality, best_name = max(candidates, key=lambda x: x[0])
+
+        # 新しい名前の品質が現在より高い場合のみ更新
+        if best_name and best_quality > old_quality and best_name != old_name:
+            updates.append((best_name, row["id"]))
 
     updated = batch_update_company_names(updates)
 
