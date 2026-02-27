@@ -1348,49 +1348,60 @@ def match_listings_for_engineer(engineer_id: int, limit: int = 20) -> list[dict]
         ).fetchall()
         eng["skills"] = [s["skill_name"] for s in sk]
 
-        # 直近30日の案件
+        # 直近30日の案件 — スコア計算に必要な列だけ取得（高速化）
         if _USE_PG:
             date_cond = "created_at > NOW() - INTERVAL '30 days'"
         else:
             date_cond = "created_at > datetime('now', '-30 days')"
         rows = conn.execute(
-            f"SELECT * FROM job_listings WHERE {date_cond} ORDER BY created_at DESC"
+            f"""SELECT id, required_skills, work_area, unit_price_min, unit_price_max
+                FROM job_listings WHERE {date_cond}"""
         ).fetchall()
 
         # Pythonでスコア計算（DBクエリなし）
-        scored = []
+        scored: list[tuple[int, dict]] = []
         for row in rows:
-            listing = dict(row)
-            score_detail = _calc_match_score(eng, listing)
-            scored.append((listing, score_detail))
+            listing_slim = dict(row)
+            score_detail = _calc_match_score(eng, listing_slim)
+            scored.append((listing_slim["id"], score_detail))
 
-        # スコア上位のみ取得してから提案を一括クエリ
+        # スコア上位のIDだけ取得
         scored.sort(key=lambda x: x[1]["total"], reverse=True)
         top = scored[:limit]
+        if not top:
+            return []
 
-        # 上位のlisting_idだけ提案を一括取得
+        top_ids = [t[0] for t in top]
+        score_map = {t[0]: t[1] for t in top}
+
+        # 上位案件のフルデータを一括取得
+        placeholders = ",".join("?" * len(top_ids))
+        full_rows = conn.execute(
+            f"SELECT * FROM job_listings WHERE id IN ({placeholders})",
+            top_ids,
+        ).fetchall()
+        listing_map = {dict(r)["id"]: dict(r) for r in full_rows}
+
+        # 上位の提案を一括取得
         prop_map: dict[int, dict] = {}
-        if top:
-            top_ids = [t[0]["id"] for t in top]
-            placeholders = ",".join("?" * len(top_ids))
-            prop_rows = conn.execute(
-                f"SELECT * FROM matching_proposals WHERE engineer_id = ? AND listing_id IN ({placeholders})",
-                [engineer_id] + top_ids,
-            ).fetchall()
-            for pr in prop_rows:
-                prop_map[pr["listing_id"]] = dict(pr)
+        prop_rows = conn.execute(
+            f"SELECT * FROM matching_proposals WHERE engineer_id = ? AND listing_id IN ({placeholders})",
+            [engineer_id] + top_ids,
+        ).fetchall()
+        for pr in prop_rows:
+            prop_map[pr["listing_id"]] = dict(pr)
 
+        # スコア順で結果を組み立て
         results = []
-        for listing, score_detail in top:
+        for lid, sd in top:
+            listing = listing_map.get(lid)
+            if not listing:
+                continue
             results.append({
                 "listing": listing,
-                "score": score_detail["total"],
-                "score_detail": {
-                    "skill": score_detail["skill"],
-                    "area": score_detail["area"],
-                    "price": score_detail["price"],
-                },
-                "proposal": prop_map.get(listing["id"]),
+                "score": sd["total"],
+                "score_detail": {"skill": sd["skill"], "area": sd["area"], "price": sd["price"]},
+                "proposal": prop_map.get(lid),
             })
 
         return results
