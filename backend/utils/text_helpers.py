@@ -476,6 +476,9 @@ def _is_defective_company_name(name: str) -> bool:
     """法人格付きだが壊れた会社名を検出する（品質0にする対象）"""
     if not name:
         return False
+    # URL混入（株式会社 http://www.kzcom.jp/）
+    if re.search(r"https?://|www\.", name):
+        return True
     # 装飾文字（───, ━━━ 等）を含む
     if re.search(r"[─━═▬―]{2,}", name):
         return True
@@ -505,6 +508,14 @@ def _is_defective_company_name(name: str) -> bool:
     return False
 
 
+def _normalize_corp_abbreviation(name: str) -> str:
+    """（株）→ 株式会社 等の略称を正式名称に変換する"""
+    name = re.sub(r"[（(]株[）)]", "株式会社", name)
+    name = re.sub(r"[（(]有[）)]", "有限会社", name)
+    name = re.sub(r"[（(]同[）)]", "合同会社", name)
+    return name
+
+
 def _company_name_quality(name: str) -> int:
     """会社名の品質スコアを返す（0〜4、高いほど良い）
 
@@ -518,7 +529,9 @@ def _company_name_quality(name: str) -> int:
         return 0
     if _is_defective_company_name(name):
         return 0
-    if _contains_corp_keyword(name):
+    # （株）等の略称も法人格付きとして評価
+    normalized = _normalize_corp_abbreviation(name)
+    if _contains_corp_keyword(normalized):
         return 4
     # CJK文字を含む
     if re.search(rf"{_JP_CHAR}", name):

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import KPICard from "@/components/KPICard";
+import CollapsibleSection from "@/components/CollapsibleSection";
 import SkillBarChart from "@/components/charts/SkillBarChart";
 import PriceHistogram from "@/components/charts/PriceHistogram";
 import AreaPieChart from "@/components/charts/AreaPieChart";
@@ -75,47 +76,61 @@ export default function DashboardPage() {
           読み込み中...
         </div>
       ) : (
-        <>
-          {/* KPI カード */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <KPICard label="総案件数" value={`${kpis?.total ?? 0}件`} icon="📋" />
-            <KPICard label="平均単価" value={`${kpis?.avg_price ?? 0}万円`} icon="💰" />
-            <KPICard label="本日の新着" value={`${kpis?.today_count ?? 0}件`} icon="🆕" />
-            <KPICard label="エリア数" value={`${kpis?.area_count ?? 0}`} icon="📍" />
-          </div>
-
-          {/* チャート 2x2 */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <SkillBarChart data={charts?.skills ?? []} />
-            <PriceHistogram data={charts?.prices ?? []} />
-            <AreaPieChart data={charts?.areas ?? []} />
-            <div>
-              <div className="flex gap-2 mb-2">
-                <button
-                  onClick={() => setGranularity("daily")}
-                  className={`px-3 py-1 rounded text-xs ${
-                    granularity === "daily"
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-200 text-slate-600"
-                  }`}
-                >
-                  日別
-                </button>
-                <button
-                  onClick={() => setGranularity("weekly")}
-                  className={`px-3 py-1 rounded text-xs ${
-                    granularity === "weekly"
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-200 text-slate-600"
-                  }`}
-                >
-                  週別
-                </button>
-              </div>
-              <TrendLineChart data={charts?.trend ?? []} />
+        <div className="flex flex-col gap-4">
+          {/* KPI サマリー（総案件数・本日の新着・エリア数） */}
+          <CollapsibleSection title="サマリー" defaultOpen={true}>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+              <KPICard label="総案件数" value={`${kpis?.total ?? 0}件`} icon="📋" />
+              <KPICard label="本日の新着" value={`${kpis?.today_count ?? 0}件`} icon="🆕" />
+              <KPICard label="エリア数" value={`${kpis?.area_count ?? 0}`} icon="📍" />
             </div>
-          </div>
-        </>
+          </CollapsibleSection>
+
+          {/* 単価情報（平均単価 + 単価分布）— デフォルト閉じ */}
+          <CollapsibleSection title="単価情報" defaultOpen={false}>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <KPICard label="平均単価" value={`${kpis?.avg_price ?? 0}万円`} icon="💰" />
+              <PriceHistogram data={charts?.prices ?? []} />
+            </div>
+          </CollapsibleSection>
+
+          {/* スキル分布 */}
+          <CollapsibleSection title="スキル分布" defaultOpen={true}>
+            <SkillBarChart data={charts?.skills ?? []} />
+          </CollapsibleSection>
+
+          {/* エリア分布 */}
+          <CollapsibleSection title="エリア分布" defaultOpen={true}>
+            <AreaPieChart data={charts?.areas ?? []} />
+          </CollapsibleSection>
+
+          {/* トレンド */}
+          <CollapsibleSection title="案件トレンド" defaultOpen={true}>
+            <div className="flex gap-2 mb-2">
+              <button
+                onClick={() => setGranularity("daily")}
+                className={`px-3 py-1 rounded text-xs ${
+                  granularity === "daily"
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-200 text-slate-600"
+                }`}
+              >
+                日別
+              </button>
+              <button
+                onClick={() => setGranularity("weekly")}
+                className={`px-3 py-1 rounded text-xs ${
+                  granularity === "weekly"
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-200 text-slate-600"
+                }`}
+              >
+                週別
+              </button>
+            </div>
+            <TrendLineChart data={charts?.trend ?? []} />
+          </CollapsibleSection>
+        </div>
       )}
     </div>
   );

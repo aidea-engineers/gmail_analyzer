@@ -19,6 +19,7 @@ from utils.text_helpers import (
     extract_company_from_signature,
     _extract_domain_company,
     _company_name_quality,
+    _normalize_corp_abbreviation,
 )
 
 logger = logging.getLogger(__name__)
@@ -163,7 +164,8 @@ def extract_from_email(
                     # (品質, ソース信頼度) で最良を選択
                     best = max(candidates, key=lambda x: (x[0], x[1]))
                     if best[2]:
-                        listing.company_name = best[2]
+                        # （株）→ 株式会社 等の略称を正規化
+                        listing.company_name = _normalize_corp_abbreviation(best[2])
 
             return result.listings
 

@@ -26,6 +26,7 @@ from utils.text_helpers import (
     extract_company_from_signature,
     _extract_domain_company,
     _company_name_quality,
+    _normalize_corp_abbreviation,
 )
 from config import Config
 
@@ -399,9 +400,13 @@ def fix_company_names(
 
         best = max(candidates, key=lambda x: (x[0], x[1]))
         best_quality, _, best_name = best
+        # （株）→ 株式会社 等の略称を正規化
+        best_name = _normalize_corp_abbreviation(best_name)
 
         # 新しい名前の品質が現在より高い場合のみ更新
-        if best_name and best_quality > old_quality and best_name != old_name:
+        # また、既存名の（株）正規化も行う
+        old_normalized = _normalize_corp_abbreviation(old_name)
+        if best_name and (best_quality > old_quality or old_normalized != old_name) and best_name != old_name:
             updates.append((best_name, row["id"]))
 
     updated = batch_update_company_names(updates)
