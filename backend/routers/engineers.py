@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import csv
 import io
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Query, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
+
+logger = logging.getLogger(__name__)
 
 from core.database import (
     insert_engineer,
@@ -32,17 +35,25 @@ router = APIRouter(prefix="/api/engineers", tags=["engineers"])
 @router.get("/stats")
 def engineer_stats():
     """エンジニアのKPI統計"""
-    return get_engineer_stats()
+    try:
+        return get_engineer_stats()
+    except Exception as e:
+        logger.exception("engineer_stats error")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/filters")
 def engineer_filters():
     """フィルター選択肢を返す"""
-    return {
-        "skills": get_distinct_engineer_skills(),
-        "areas": get_distinct_engineer_areas(),
-        "statuses": ["待機中", "稼働中", "面談中", "休止中"],
-    }
+    try:
+        return {
+            "skills": get_distinct_engineer_skills(),
+            "areas": get_distinct_engineer_areas(),
+            "statuses": ["待機中", "稼働中", "面談中", "休止中"],
+        }
+    except Exception as e:
+        logger.exception("engineer_filters error")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/list")
@@ -55,38 +66,42 @@ def engineer_list(
     price_max: Optional[int] = None,
 ):
     """エンジニア一覧（フィルター付き）"""
-    skills_list = [s.strip() for s in skills.split(",") if s.strip()] if skills else None
-    statuses_list = [s.strip() for s in statuses.split(",") if s.strip()] if statuses else None
-    areas_list = [a.strip() for a in areas.split(",") if a.strip()] if areas else None
+    try:
+        skills_list = [s.strip() for s in skills.split(",") if s.strip()] if skills else None
+        statuses_list = [s.strip() for s in statuses.split(",") if s.strip()] if statuses else None
+        areas_list = [a.strip() for a in areas.split(",") if a.strip()] if areas else None
 
-    results = search_engineers(
-        keyword=keyword,
-        skills=skills_list,
-        statuses=statuses_list,
-        areas=areas_list,
-        price_min=price_min if price_min and price_min > 0 else None,
-        price_max=price_max if price_max and price_max < 300 else None,
-    )
+        results = search_engineers(
+            keyword=keyword,
+            skills=skills_list,
+            statuses=statuses_list,
+            areas=areas_list,
+            price_min=price_min if price_min and price_min > 0 else None,
+            price_max=price_max if price_max and price_max < 300 else None,
+        )
 
-    engineers = []
-    for r in results:
-        engineers.append({
-            "id": r["id"],
-            "name": r["name"],
-            "experience_years": r.get("experience_years"),
-            "current_price": r.get("current_price"),
-            "desired_price_min": r.get("desired_price_min"),
-            "desired_price_max": r.get("desired_price_max"),
-            "status": r.get("status", "待機中"),
-            "preferred_areas": r.get("preferred_areas", ""),
-            "available_from": r.get("available_from", ""),
-            "notes": r.get("notes", ""),
-            "skills": r.get("skills", []),
-            "created_at": str(r.get("created_at", "")),
-            "updated_at": str(r.get("updated_at", "")),
-        })
+        engineers = []
+        for r in results:
+            engineers.append({
+                "id": r["id"],
+                "name": r["name"],
+                "experience_years": r.get("experience_years"),
+                "current_price": r.get("current_price"),
+                "desired_price_min": r.get("desired_price_min"),
+                "desired_price_max": r.get("desired_price_max"),
+                "status": r.get("status", "待機中"),
+                "preferred_areas": r.get("preferred_areas", ""),
+                "available_from": r.get("available_from", ""),
+                "notes": r.get("notes", ""),
+                "skills": r.get("skills", []),
+                "created_at": str(r.get("created_at", "")),
+                "updated_at": str(r.get("updated_at", "")),
+            })
 
-    return {"total": len(engineers), "engineers": engineers}
+        return {"total": len(engineers), "engineers": engineers}
+    except Exception as e:
+        logger.exception("engineer_list error")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/export")
@@ -213,11 +228,15 @@ async def engineer_import_csv(file: UploadFile = File(...)):
 @router.post("")
 def create_engineer(body: EngineerCreate):
     """エンジニア新規登録"""
-    data = body.model_dump()
-    # スキル正規化
-    data["skills"] = [normalize_skill_name(s) for s in data.get("skills", [])]
-    eng_id = insert_engineer(data)
-    return {"id": eng_id, "message": "登録しました"}
+    try:
+        data = body.model_dump()
+        # スキル正規化
+        data["skills"] = [normalize_skill_name(s) for s in data.get("skills", [])]
+        eng_id = insert_engineer(data)
+        return {"id": eng_id, "message": "登録しました"}
+    except Exception as e:
+        logger.exception("create_engineer error")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/{eng_id}")
