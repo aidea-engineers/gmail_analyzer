@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import Config
-from core.database import init_db, cleanup_stale_fetch_logs
+from core.database import init_db, cleanup_stale_fetch_logs, clear_old_email_bodies
 from routers import dashboard, search, fetch, settings
 
 # ロギング設定（Renderログに出力するためstdoutに設定）
@@ -49,6 +49,9 @@ def startup():
     cleaned = cleanup_stale_fetch_logs()
     if cleaned:
         logger.info("Stale fetch logs cleaned up: %d entries", cleaned)
+    cleared = clear_old_email_bodies(days=7)
+    if cleared:
+        logger.info("Old email bodies cleared: %d emails", cleared)
 
 
 @app.get("/api/health")

@@ -794,3 +794,27 @@ def cleanup_stale_fetch_logs(stale_minutes: int = 10) -> int:
                 ),
             )
         return cursor.rowcount
+
+
+def clear_old_email_bodies(days: int = 7) -> int:
+    """処理済みメールのうち、指定日数を超えた本文を空にする（容量節約）"""
+    with get_connection() as conn:
+        if conn.is_pg:
+            cursor = conn.execute(
+                """UPDATE emails
+                   SET body_text = ''
+                   WHERE is_processed = TRUE
+                     AND body_text != ''
+                     AND created_at < NOW() - INTERVAL '1 day' * ?""",
+                (days,),
+            )
+        else:
+            cursor = conn.execute(
+                """UPDATE emails
+                   SET body_text = ''
+                   WHERE is_processed = TRUE
+                     AND body_text != ''
+                     AND created_at < datetime('now', ? || ' days')""",
+                (f"-{days}",),
+            )
+        return cursor.rowcount

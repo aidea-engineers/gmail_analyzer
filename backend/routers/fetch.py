@@ -18,6 +18,7 @@ from core.database import (
     get_all_listings_with_sender,
     get_all_listings_with_sender_and_body,
     batch_update_company_names,
+    clear_old_email_bodies,
 )
 from core.mock_data import generate_and_insert, clear_all_data, clear_mock_data
 from core.gmail_client import is_authenticated
@@ -220,6 +221,14 @@ def _run_cron_pipeline_bg():
             "Cron pipeline completed: fetched=%d processed=%d listings=%d errors=%d batches=%d",
             total_fetched, total_processed, total_listings, total_errors, batch_num,
         )
+
+        # 処理済みメールの本文を7日後に自動削除（Supabase容量対策）
+        try:
+            cleared = clear_old_email_bodies(days=7)
+            if cleared:
+                logger.info("Cron pipeline: cleared %d old email bodies", cleared)
+        except Exception:
+            logger.exception("Failed to clear old email bodies")
     except Exception:
         logger.exception("Cron pipeline failed")
     finally:
