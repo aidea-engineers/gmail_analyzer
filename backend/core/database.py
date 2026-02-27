@@ -1290,25 +1290,32 @@ def match_engineers_for_listing(listing_id: int, limit: int = 20) -> list[dict]:
             ("待機中", "面談中"),
         ).fetchall()
 
+        # 全エンジニアのスキルを一括取得
+        eng_ids = [dict(r)["id"] for r in rows]
+        skills_map: dict[int, list[str]] = {eid: [] for eid in eng_ids}
+        if eng_ids:
+            placeholders = ",".join("?" * len(eng_ids))
+            sk_rows = conn.execute(
+                f"SELECT engineer_id, skill_name FROM engineer_skills WHERE engineer_id IN ({placeholders})",
+                eng_ids,
+            ).fetchall()
+            for sr in sk_rows:
+                skills_map[sr["engineer_id"]].append(sr["skill_name"])
+
+        # この案件に対する提案を一括取得
+        prop_map: dict[int, dict] = {}
+        prop_rows = conn.execute(
+            "SELECT * FROM matching_proposals WHERE listing_id = ?",
+            (listing_id,),
+        ).fetchall()
+        for pr in prop_rows:
+            prop_map[pr["engineer_id"]] = dict(pr)
+
         results = []
         for row in rows:
             eng = dict(row)
-            # スキルを付与
-            sk = conn.execute(
-                "SELECT skill_name FROM engineer_skills WHERE engineer_id = ?",
-                (eng["id"],),
-            ).fetchall()
-            eng["skills"] = [s["skill_name"] for s in sk]
-
+            eng["skills"] = skills_map.get(eng["id"], [])
             score_detail = _calc_match_score(eng, listing)
-
-            # 既存の提案を取得
-            prop = conn.execute(
-                "SELECT * FROM matching_proposals WHERE engineer_id = ? AND listing_id = ?",
-                (eng["id"], listing_id),
-            ).fetchone()
-            proposal = dict(prop) if prop else None
-
             results.append({
                 "engineer": eng,
                 "score": score_detail["total"],
@@ -1317,10 +1324,9 @@ def match_engineers_for_listing(listing_id: int, limit: int = 20) -> list[dict]:
                     "area": score_detail["area"],
                     "price": score_detail["price"],
                 },
-                "proposal": proposal,
+                "proposal": prop_map.get(eng["id"]),
             })
 
-        # スコア降順でソート
         results.sort(key=lambda x: x["score"], reverse=True)
         return results[:limit]
 
@@ -1351,18 +1357,31 @@ def match_listings_for_engineer(engineer_id: int, limit: int = 20) -> list[dict]
             f"SELECT * FROM job_listings WHERE {date_cond} ORDER BY created_at DESC"
         ).fetchall()
 
-        results = []
+        # Pythonでスコア計算（DBクエリなし）
+        scored = []
         for row in rows:
             listing = dict(row)
             score_detail = _calc_match_score(eng, listing)
+            scored.append((listing, score_detail))
 
-            # 既存の提案を取得
-            prop = conn.execute(
-                "SELECT * FROM matching_proposals WHERE engineer_id = ? AND listing_id = ?",
-                (engineer_id, listing["id"]),
-            ).fetchone()
-            proposal = dict(prop) if prop else None
+        # スコア上位のみ取得してから提案を一括クエリ
+        scored.sort(key=lambda x: x[1]["total"], reverse=True)
+        top = scored[:limit]
 
+        # 上位のlisting_idだけ提案を一括取得
+        prop_map: dict[int, dict] = {}
+        if top:
+            top_ids = [t[0]["id"] for t in top]
+            placeholders = ",".join("?" * len(top_ids))
+            prop_rows = conn.execute(
+                f"SELECT * FROM matching_proposals WHERE engineer_id = ? AND listing_id IN ({placeholders})",
+                [engineer_id] + top_ids,
+            ).fetchall()
+            for pr in prop_rows:
+                prop_map[pr["listing_id"]] = dict(pr)
+
+        results = []
+        for listing, score_detail in top:
             results.append({
                 "listing": listing,
                 "score": score_detail["total"],
@@ -1371,11 +1390,10 @@ def match_listings_for_engineer(engineer_id: int, limit: int = 20) -> list[dict]
                     "area": score_detail["area"],
                     "price": score_detail["price"],
                 },
-                "proposal": proposal,
+                "proposal": prop_map.get(listing["id"]),
             })
 
-        results.sort(key=lambda x: x["score"], reverse=True)
-        return results[:limit]
+        return results
 
 
 def insert_proposal(engineer_id: int, listing_id: int, score: int = 0, notes: str = "") -> Optional[int]:
