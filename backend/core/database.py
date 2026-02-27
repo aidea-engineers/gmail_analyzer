@@ -194,6 +194,25 @@ CREATE TABLE IF NOT EXISTS engineer_assignments (
 
 CREATE INDEX IF NOT EXISTS idx_eng_assignments_engineer
     ON engineer_assignments(engineer_id);
+
+CREATE TABLE IF NOT EXISTS matching_proposals (
+    id              SERIAL PRIMARY KEY,
+    engineer_id     INTEGER NOT NULL REFERENCES engineers(id) ON DELETE CASCADE,
+    listing_id      INTEGER NOT NULL REFERENCES job_listings(id) ON DELETE CASCADE,
+    score           INTEGER DEFAULT 0,
+    status          TEXT DEFAULT '候補',
+    notes           TEXT DEFAULT '',
+    created_at      TIMESTAMP DEFAULT NOW(),
+    updated_at      TIMESTAMP DEFAULT NOW(),
+    UNIQUE(engineer_id, listing_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_proposals_engineer
+    ON matching_proposals(engineer_id);
+CREATE INDEX IF NOT EXISTS idx_proposals_listing
+    ON matching_proposals(listing_id);
+CREATE INDEX IF NOT EXISTS idx_proposals_status
+    ON matching_proposals(status);
 """
 
 _SQLITE_SCHEMA = """
@@ -307,6 +326,27 @@ CREATE TABLE IF NOT EXISTS engineer_assignments (
 
 CREATE INDEX IF NOT EXISTS idx_eng_assignments_engineer
     ON engineer_assignments(engineer_id);
+
+CREATE TABLE IF NOT EXISTS matching_proposals (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    engineer_id     INTEGER NOT NULL,
+    listing_id      INTEGER NOT NULL,
+    score           INTEGER DEFAULT 0,
+    status          TEXT DEFAULT '候補',
+    notes           TEXT DEFAULT '',
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(engineer_id, listing_id),
+    FOREIGN KEY (engineer_id) REFERENCES engineers(id) ON DELETE CASCADE,
+    FOREIGN KEY (listing_id) REFERENCES job_listings(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_proposals_engineer
+    ON matching_proposals(engineer_id);
+CREATE INDEX IF NOT EXISTS idx_proposals_listing
+    ON matching_proposals(listing_id);
+CREATE INDEX IF NOT EXISTS idx_proposals_status
+    ON matching_proposals(status);
 """
 
 
@@ -1165,3 +1205,287 @@ def delete_assignment(assignment_id: int) -> bool:
             "DELETE FROM engineer_assignments WHERE id = ?", (assignment_id,)
         )
         return cursor.rowcount > 0
+
+
+# --- Matching ---
+
+def _calc_match_score(engineer: dict, listing: dict) -> dict:
+    """エンジニアと案件のマッチスコアを計算する（合計100点満点）。"""
+
+    # --- スキルマッチ (0〜50点) ---
+    listing_skills_raw = listing.get("required_skills") or "[]"
+    if isinstance(listing_skills_raw, str):
+        try:
+            listing_skills = json.loads(listing_skills_raw)
+        except (json.JSONDecodeError, TypeError):
+            listing_skills = []
+    else:
+        listing_skills = listing_skills_raw
+
+    eng_skills = set(engineer.get("skills") or [])
+    listing_skill_set = set(listing_skills)
+
+    if not listing_skill_set:
+        skill_score = 25  # 中間値
+    elif not eng_skills:
+        skill_score = 0
+    else:
+        common = len(eng_skills & listing_skill_set)
+        skill_score = round(common / len(listing_skill_set) * 50)
+
+    # --- エリアマッチ (0〜25点) ---
+    listing_area = (listing.get("work_area") or "").strip()
+    eng_areas_raw = (engineer.get("preferred_areas") or "").strip()
+    eng_areas = [a.strip() for a in eng_areas_raw.split(",") if a.strip()] if eng_areas_raw else []
+
+    if not listing_area:
+        area_score = 15  # 判定不能
+    elif listing_area in eng_areas:
+        area_score = 25
+    elif "リモート" in listing_area or "フルリモート" in listing_area:
+        area_score = 20
+    elif not eng_areas:
+        area_score = 15  # どこでもOK
+    else:
+        area_score = 0
+
+    # --- 単価マッチ (0〜25点) ---
+    l_min = listing.get("unit_price_min")
+    l_max = listing.get("unit_price_max")
+    e_min = engineer.get("desired_price_min") or engineer.get("current_price")
+    e_max = engineer.get("desired_price_max") or engineer.get("current_price")
+
+    if l_min is None and l_max is None:
+        price_score = 15  # 案件側データなし
+    elif e_min is None and e_max is None:
+        price_score = 15  # エンジニア側データなし
+    else:
+        # 範囲の重なり判定
+        r_min = l_min if l_min is not None else l_max
+        r_max = l_max if l_max is not None else l_min
+        e_lo = e_min if e_min is not None else e_max
+        e_hi = e_max if e_max is not None else e_min
+        if r_min <= e_hi and e_lo <= r_max:
+            price_score = 25
+        else:
+            price_score = 0
+
+    total = skill_score + area_score + price_score
+    return {"skill": skill_score, "area": area_score, "price": price_score, "total": total}
+
+
+def match_engineers_for_listing(listing_id: int, limit: int = 20) -> list[dict]:
+    """案件に合うエンジニア一覧（待機中/面談中のみ、スコア降順）。"""
+    with get_connection() as conn:
+        listing_row = conn.execute(
+            "SELECT * FROM job_listings WHERE id = ?", (listing_id,)
+        ).fetchone()
+        if not listing_row:
+            return []
+        listing = dict(listing_row)
+
+        # 待機中・面談中のエンジニアを全件取得
+        rows = conn.execute(
+            "SELECT * FROM engineers WHERE status IN (?, ?)",
+            ("待機中", "面談中"),
+        ).fetchall()
+
+        results = []
+        for row in rows:
+            eng = dict(row)
+            # スキルを付与
+            sk = conn.execute(
+                "SELECT skill_name FROM engineer_skills WHERE engineer_id = ?",
+                (eng["id"],),
+            ).fetchall()
+            eng["skills"] = [s["skill_name"] for s in sk]
+
+            score_detail = _calc_match_score(eng, listing)
+
+            # 既存の提案を取得
+            prop = conn.execute(
+                "SELECT * FROM matching_proposals WHERE engineer_id = ? AND listing_id = ?",
+                (eng["id"], listing_id),
+            ).fetchone()
+            proposal = dict(prop) if prop else None
+
+            results.append({
+                "engineer": eng,
+                "score": score_detail["total"],
+                "score_detail": {
+                    "skill": score_detail["skill"],
+                    "area": score_detail["area"],
+                    "price": score_detail["price"],
+                },
+                "proposal": proposal,
+            })
+
+        # スコア降順でソート
+        results.sort(key=lambda x: x["score"], reverse=True)
+        return results[:limit]
+
+
+def match_listings_for_engineer(engineer_id: int, limit: int = 20) -> list[dict]:
+    """エンジニアに合う案件一覧（直近30日、スコア降順）。"""
+    with get_connection() as conn:
+        eng_row = conn.execute(
+            "SELECT * FROM engineers WHERE id = ?", (engineer_id,)
+        ).fetchone()
+        if not eng_row:
+            return []
+        eng = dict(eng_row)
+
+        # スキルを付与
+        sk = conn.execute(
+            "SELECT skill_name FROM engineer_skills WHERE engineer_id = ?",
+            (engineer_id,),
+        ).fetchall()
+        eng["skills"] = [s["skill_name"] for s in sk]
+
+        # 直近30日の案件
+        if _USE_PG:
+            date_cond = "created_at > NOW() - INTERVAL '30 days'"
+        else:
+            date_cond = "created_at > datetime('now', '-30 days')"
+        rows = conn.execute(
+            f"SELECT * FROM job_listings WHERE {date_cond} ORDER BY created_at DESC"
+        ).fetchall()
+
+        results = []
+        for row in rows:
+            listing = dict(row)
+            score_detail = _calc_match_score(eng, listing)
+
+            # 既存の提案を取得
+            prop = conn.execute(
+                "SELECT * FROM matching_proposals WHERE engineer_id = ? AND listing_id = ?",
+                (engineer_id, listing["id"]),
+            ).fetchone()
+            proposal = dict(prop) if prop else None
+
+            results.append({
+                "listing": listing,
+                "score": score_detail["total"],
+                "score_detail": {
+                    "skill": score_detail["skill"],
+                    "area": score_detail["area"],
+                    "price": score_detail["price"],
+                },
+                "proposal": proposal,
+            })
+
+        results.sort(key=lambda x: x["score"], reverse=True)
+        return results[:limit]
+
+
+def insert_proposal(engineer_id: int, listing_id: int, score: int = 0, notes: str = "") -> Optional[int]:
+    """提案レコードを作成する（UNIQUE制約で重複防止）。"""
+    with get_connection() as conn:
+        try:
+            if conn.is_pg:
+                cursor = conn.execute(
+                    """INSERT INTO matching_proposals (engineer_id, listing_id, score, notes)
+                       VALUES (?, ?, ?, ?)
+                       ON CONFLICT (engineer_id, listing_id) DO NOTHING
+                       RETURNING id""",
+                    (engineer_id, listing_id, score, notes),
+                )
+                row = cursor.fetchone()
+                return row["id"] if row else None
+            else:
+                cursor = conn.execute(
+                    """INSERT OR IGNORE INTO matching_proposals
+                       (engineer_id, listing_id, score, notes)
+                       VALUES (?, ?, ?, ?)""",
+                    (engineer_id, listing_id, score, notes),
+                )
+                return cursor.lastrowid if cursor.rowcount > 0 else None
+        except Exception:
+            return None
+
+
+def update_proposal_status(proposal_id: int, status: str, notes: Optional[str] = None) -> bool:
+    """提案ステータスを変更する。"""
+    with get_connection() as conn:
+        if notes is not None:
+            if conn.is_pg:
+                conn.execute(
+                    "UPDATE matching_proposals SET status = ?, notes = ?, updated_at = NOW() WHERE id = ?",
+                    (status, notes, proposal_id),
+                )
+            else:
+                conn.execute(
+                    "UPDATE matching_proposals SET status = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (status, notes, proposal_id),
+                )
+        else:
+            if conn.is_pg:
+                conn.execute(
+                    "UPDATE matching_proposals SET status = ?, updated_at = NOW() WHERE id = ?",
+                    (status, proposal_id),
+                )
+            else:
+                conn.execute(
+                    "UPDATE matching_proposals SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (status, proposal_id),
+                )
+        return True
+
+
+def delete_proposal(proposal_id: int) -> bool:
+    """提案を削除する。"""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "DELETE FROM matching_proposals WHERE id = ?", (proposal_id,)
+        )
+        return cursor.rowcount > 0
+
+
+def get_proposals(
+    status: Optional[str] = None,
+    engineer_id: Optional[int] = None,
+    listing_id: Optional[int] = None,
+) -> list[dict]:
+    """提案一覧（フィルター付き）。"""
+    with get_connection() as conn:
+        query = """
+            SELECT mp.*,
+                   e.name as engineer_name,
+                   jl.company_name as listing_company
+            FROM matching_proposals mp
+            JOIN engineers e ON mp.engineer_id = e.id
+            JOIN job_listings jl ON mp.listing_id = jl.id
+            WHERE 1=1
+        """
+        params: list = []
+        if status:
+            query += " AND mp.status = ?"
+            params.append(status)
+        if engineer_id:
+            query += " AND mp.engineer_id = ?"
+            params.append(engineer_id)
+        if listing_id:
+            query += " AND mp.listing_id = ?"
+            params.append(listing_id)
+        query += " ORDER BY mp.updated_at DESC"
+
+        rows = conn.execute(query, params).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_matching_stats() -> dict:
+    """提案のKPI統計（ステータス別件数）。"""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT status, COUNT(*) as cnt FROM matching_proposals GROUP BY status"
+        ).fetchall()
+        by_status = {r["status"]: r["cnt"] for r in rows}
+        total = sum(by_status.values())
+    return {
+        "total": total,
+        "candidate": by_status.get("候補", 0),
+        "proposed": by_status.get("提案済み", 0),
+        "interviewing": by_status.get("面談中", 0),
+        "closed": by_status.get("成約", 0),
+        "rejected": by_status.get("見送り", 0),
+    }

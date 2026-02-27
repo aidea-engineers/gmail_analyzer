@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { getFilters, getListings, getExportURL } from "@/lib/api";
 import type { SearchFilters, JobListing } from "@/types";
 
 export default function SearchPage() {
+  const router = useRouter();
   const [filters, setFilters] = useState<SearchFilters | null>(null);
   const [listings, setListings] = useState<JobListing[]>([]);
   const [total, setTotal] = useState(0);
@@ -352,6 +354,16 @@ export default function SearchPage() {
                         <p className="text-sm mt-1 whitespace-pre-wrap">{item.requirements}</p>
                       </div>
                     )}
+                    <div className="mt-3">
+                      <button
+                        onClick={() =>
+                          router.push(`/matching?tab=listing&id=${item.id}`)
+                        }
+                        className="px-3 py-1.5 bg-purple-600 text-white text-xs rounded-lg hover:bg-purple-700 transition-colors"
+                      >
+                        マッチするエンジニアを探す
+                      </button>
+                    </div>
                     {item.subject && (
                       <p className="text-xs text-slate-400 mt-2">
                         メール件名: {item.subject}

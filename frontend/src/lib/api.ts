@@ -177,3 +177,67 @@ export function deleteAssignment(assignmentId: number) {
     { method: "DELETE" }
   );
 }
+
+/* Matching */
+export function getMatchingStats() {
+  return fetchAPI<import("@/types").MatchingStats>("/api/matching/stats");
+}
+
+export function getEngineersForListing(listingId: number, limit = 20) {
+  return fetchAPI<{ matches: import("@/types").EngineerMatchResult[] }>(
+    `/api/matching/engineers-for-listing/${listingId}?limit=${limit}`
+  );
+}
+
+export function getListingsForEngineer(engineerId: number, limit = 20) {
+  return fetchAPI<{ matches: import("@/types").ListingMatchResult[] }>(
+    `/api/matching/listings-for-engineer/${engineerId}?limit=${limit}`
+  );
+}
+
+export function createProposal(data: {
+  engineer_id: number;
+  listing_id: number;
+  score: number;
+  notes?: string;
+}) {
+  return fetchAPI<{ id: number; message: string }>("/api/matching/proposals", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateProposal(
+  proposalId: number,
+  data: { status: string; notes?: string }
+) {
+  return fetchAPI<{ message: string }>(
+    `/api/matching/proposals/${proposalId}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }
+  );
+}
+
+export function deleteProposal(proposalId: number) {
+  return fetchAPI<{ message: string }>(
+    `/api/matching/proposals/${proposalId}`,
+    { method: "DELETE" }
+  );
+}
+
+export function getProposals(params: Record<string, string>) {
+  const qs = new URLSearchParams(params).toString();
+  return fetchAPI<{ proposals: import("@/types").MatchProposal[] }>(
+    `/api/matching/proposals?${qs}`
+  );
+}
+
+export function getEngineersBrief() {
+  return fetchAPI<import("@/types").EngineerBrief[]>(
+    "/api/matching/engineers-brief"
+  );
+}

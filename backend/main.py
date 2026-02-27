@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import Config
 from core.database import init_db, cleanup_stale_fetch_logs, clear_old_email_bodies
-from routers import dashboard, search, fetch, settings, engineers
+from routers import dashboard, search, fetch, settings, engineers, matching
 
 # ロギング設定（Renderログに出力するためstdoutに設定）
 logging.basicConfig(
@@ -39,6 +39,7 @@ app.include_router(search.router)
 app.include_router(fetch.router)
 app.include_router(settings.router)
 app.include_router(engineers.router)
+app.include_router(matching.router)
 
 
 logger = logging.getLogger(__name__)

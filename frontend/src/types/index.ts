@@ -195,3 +195,53 @@ export interface CsvImportResult {
   imported: number;
   errors: string[];
 }
+
+/* Matching */
+
+export interface MatchScoreDetail {
+  skill: number;
+  area: number;
+  price: number;
+}
+
+export interface MatchProposal {
+  id: number;
+  engineer_id: number;
+  listing_id: number;
+  engineer_name?: string;
+  listing_company?: string;
+  score: number;
+  status: string;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EngineerMatchResult {
+  engineer: Engineer;
+  score: number;
+  score_detail: MatchScoreDetail;
+  proposal: MatchProposal | null;
+}
+
+export interface ListingMatchResult {
+  listing: JobListing;
+  score: number;
+  score_detail: MatchScoreDetail;
+  proposal: MatchProposal | null;
+}
+
+export interface MatchingStats {
+  total: number;
+  candidate: number;
+  proposed: number;
+  interviewing: number;
+  closed: number;
+  rejected: number;
+}
+
+export interface EngineerBrief {
+  id: number;
+  name: string;
+  status: string;
+}

@@ -112,3 +112,19 @@ class AssignmentCreate(BaseModel):
     unit_price: Optional[int] = Field(None, description="単価（万円）")
     status: str = Field("稼働中", description="ステータス")
     notes: str = Field("", description="備考")
+
+
+# --- Matching schemas ---
+
+class ProposalCreate(BaseModel):
+    """提案登録リクエスト"""
+    engineer_id: int = Field(..., description="エンジニアID")
+    listing_id: int = Field(..., description="案件ID")
+    score: int = Field(0, description="マッチスコア")
+    notes: str = Field("", description="メモ")
+
+
+class ProposalUpdate(BaseModel):
+    """提案更新リクエスト"""
+    status: str = Field(..., description="ステータス（候補/提案済み/面談中/成約/見送り）")
+    notes: Optional[str] = Field(None, description="メモ")

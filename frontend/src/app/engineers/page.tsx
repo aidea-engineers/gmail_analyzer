@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
   getEngineerStats,
   getEngineerFilters,
@@ -45,6 +46,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function EngineersPage() {
+  const router = useRouter();
   // データ
   const [stats, setStats] = useState<EngineerStats | null>(null);
   const [filters, setFilters] = useState<EngineerFilters | null>(null);
@@ -803,6 +805,14 @@ export default function EngineersPage() {
                           className="px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 transition-colors"
                         >
                           削除
+                        </button>
+                        <button
+                          onClick={() =>
+                            router.push(`/matching?tab=engineer&id=${eng.id}`)
+                          }
+                          className="px-3 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700 transition-colors"
+                        >
+                          マッチする案件を探す
                         </button>
                       </div>
 
