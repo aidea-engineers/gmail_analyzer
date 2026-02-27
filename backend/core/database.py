@@ -313,6 +313,7 @@ CREATE INDEX IF NOT EXISTS idx_eng_assignments_engineer
 def init_db():
     with get_connection() as conn:
         conn.executescript(_PG_SCHEMA if conn.is_pg else _SQLITE_SCHEMA)
+        conn.commit()  # テーブル作成を確定（後続のALTER失敗でrollbackされないように）
         # マイグレーション: start_month カラム追加
         try:
             conn.execute(
