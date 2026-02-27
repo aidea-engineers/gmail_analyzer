@@ -121,3 +121,77 @@ export interface JobProgress {
     status: string;
   };
 }
+
+/* Engineer */
+
+export interface Engineer {
+  id: number;
+  name: string;
+  experience_years: number | null;
+  current_price: number | null;
+  desired_price_min: number | null;
+  desired_price_max: number | null;
+  status: string;
+  preferred_areas: string;
+  available_from: string;
+  notes: string;
+  skills: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EngineerDetail extends Engineer {
+  assignments: EngineerAssignment[];
+}
+
+export interface EngineerAssignment {
+  id: number;
+  engineer_id: number;
+  listing_id: number | null;
+  company_name: string;
+  project_name: string;
+  start_date: string;
+  end_date: string;
+  unit_price: number | null;
+  status: string;
+  notes: string;
+  listing_area: string | null;
+  created_at: string;
+}
+
+export interface EngineerStats {
+  total: number;
+  waiting: number;
+  active: number;
+  interview: number;
+  inactive: number;
+}
+
+export interface EngineerFilters {
+  skills: string[];
+  areas: string[];
+  statuses: string[];
+}
+
+export interface EngineersResponse {
+  total: number;
+  engineers: Engineer[];
+}
+
+export interface EngineerForm {
+  name: string;
+  skills: string;
+  experience_years: string;
+  current_price: string;
+  desired_price_min: string;
+  desired_price_max: string;
+  status: string;
+  preferred_areas: string;
+  available_from: string;
+  notes: string;
+}
+
+export interface CsvImportResult {
+  imported: number;
+  errors: string[];
+}

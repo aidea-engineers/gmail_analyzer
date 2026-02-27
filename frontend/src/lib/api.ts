@@ -94,3 +94,86 @@ export function updateSettings(data: import("@/types").SettingsUpdate) {
     body: JSON.stringify(data),
   });
 }
+
+/* Engineers */
+export function getEngineerStats() {
+  return fetchAPI<import("@/types").EngineerStats>("/api/engineers/stats");
+}
+
+export function getEngineerFilters() {
+  return fetchAPI<import("@/types").EngineerFilters>("/api/engineers/filters");
+}
+
+export function getEngineers(params: Record<string, string>) {
+  const qs = new URLSearchParams(params).toString();
+  return fetchAPI<import("@/types").EngineersResponse>(
+    `/api/engineers/list?${qs}`
+  );
+}
+
+export function getEngineerDetail(id: number) {
+  return fetchAPI<import("@/types").EngineerDetail>(`/api/engineers/${id}`);
+}
+
+export function createEngineer(data: Record<string, unknown>) {
+  return fetchAPI<{ id: number; message: string }>("/api/engineers", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateEngineer(id: number, data: Record<string, unknown>) {
+  return fetchAPI<{ message: string }>(`/api/engineers/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteEngineer(id: number) {
+  return fetchAPI<{ message: string }>(`/api/engineers/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export function getEngineerExportURL(params: Record<string, string>) {
+  const qs = new URLSearchParams(params).toString();
+  return `${API_BASE}/api/engineers/export?${qs}`;
+}
+
+export async function importEngineersCsv(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${API_BASE}/api/engineers/import-csv`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const body = await res.json();
+      if (body.detail) detail = body.detail;
+    } catch {}
+    throw new Error(detail);
+  }
+  return res.json() as Promise<import("@/types").CsvImportResult>;
+}
+
+export function createAssignment(engineerId: number, data: Record<string, unknown>) {
+  return fetchAPI<{ id: number; message: string }>(
+    `/api/engineers/${engineerId}/assignments`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }
+  );
+}
+
+export function deleteAssignment(assignmentId: number) {
+  return fetchAPI<{ message: string }>(
+    `/api/engineers/assignments/${assignmentId}`,
+    { method: "DELETE" }
+  );
+}

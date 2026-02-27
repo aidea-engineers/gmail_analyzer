@@ -1,0 +1,986 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import {
+  getEngineerStats,
+  getEngineerFilters,
+  getEngineers,
+  getEngineerDetail,
+  createEngineer,
+  updateEngineer,
+  deleteEngineer,
+  getEngineerExportURL,
+  importEngineersCsv,
+  createAssignment,
+  deleteAssignment,
+} from "@/lib/api";
+import type {
+  EngineerStats,
+  EngineerFilters,
+  Engineer,
+  EngineerDetail,
+  EngineerAssignment,
+  EngineerForm,
+  CsvImportResult,
+} from "@/types";
+
+const EMPTY_FORM: EngineerForm = {
+  name: "",
+  skills: "",
+  experience_years: "",
+  current_price: "",
+  desired_price_min: "",
+  desired_price_max: "",
+  status: "待機中",
+  preferred_areas: "",
+  available_from: "",
+  notes: "",
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  "待機中": "bg-green-100 text-green-800",
+  "稼働中": "bg-blue-100 text-blue-800",
+  "面談中": "bg-yellow-100 text-yellow-800",
+  "休止中": "bg-gray-100 text-gray-500",
+};
+
+export default function EngineersPage() {
+  // データ
+  const [stats, setStats] = useState<EngineerStats | null>(null);
+  const [filters, setFilters] = useState<EngineerFilters | null>(null);
+  const [engineers, setEngineers] = useState<Engineer[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  // フィルター状態
+  const [keyword, setKeyword] = useState("");
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
+  const [priceMin, setPriceMin] = useState("");
+  const [priceMax, setPriceMax] = useState("");
+
+  // 展開・編集
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [detail, setDetail] = useState<EngineerDetail | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [form, setForm] = useState<EngineerForm>({ ...EMPTY_FORM });
+  const [formError, setFormError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // CSVインポート
+  const [showImport, setShowImport] = useState(false);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [importResult, setImportResult] = useState<CsvImportResult | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  // アサイン追加
+  const [showAssignForm, setShowAssignForm] = useState(false);
+  const [assignForm, setAssignForm] = useState({
+    company_name: "",
+    project_name: "",
+    start_date: "",
+    end_date: "",
+    unit_price: "",
+    status: "稼働中",
+    notes: "",
+  });
+
+  // 初期読み込み
+  useEffect(() => {
+    getEngineerStats().then(setStats).catch(() => {});
+    getEngineerFilters().then(setFilters).catch(() => {});
+  }, []);
+
+  const buildParams = useCallback(() => {
+    const params: Record<string, string> = {};
+    if (keyword) params.keyword = keyword;
+    if (selectedSkills.length) params.skills = selectedSkills.join(",");
+    if (selectedStatuses.length) params.statuses = selectedStatuses.join(",");
+    if (selectedAreas.length) params.areas = selectedAreas.join(",");
+    if (priceMin) params.price_min = priceMin;
+    if (priceMax) params.price_max = priceMax;
+    return params;
+  }, [keyword, selectedSkills, selectedStatuses, selectedAreas, priceMin, priceMax]);
+
+  const doSearch = useCallback(() => {
+    setLoading(true);
+    setError("");
+    getEngineers(buildParams())
+      .then((res) => {
+        setEngineers(res.engineers);
+        setTotal(res.total);
+      })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [buildParams]);
+
+  useEffect(() => {
+    doSearch();
+  }, [doSearch]);
+
+  const reload = () => {
+    doSearch();
+    getEngineerStats().then(setStats).catch(() => {});
+    getEngineerFilters().then(setFilters).catch(() => {});
+  };
+
+  // 展開時に詳細を取得
+  const handleExpand = async (id: number) => {
+    if (expandedId === id) {
+      setExpandedId(null);
+      setDetail(null);
+      return;
+    }
+    setExpandedId(id);
+    try {
+      const d = await getEngineerDetail(id);
+      setDetail(d);
+    } catch {
+      setDetail(null);
+    }
+  };
+
+  // フィルター操作
+  const toggleMulti = (
+    arr: string[],
+    setter: React.Dispatch<React.SetStateAction<string[]>>,
+    val: string
+  ) => {
+    setter(arr.includes(val) ? arr.filter((v) => v !== val) : [...arr, val]);
+  };
+
+  const clearFilters = () => {
+    setKeyword("");
+    setSelectedSkills([]);
+    setSelectedStatuses([]);
+    setSelectedAreas([]);
+    setPriceMin("");
+    setPriceMax("");
+  };
+
+  // フォーム操作
+  const openNewForm = () => {
+    setEditId(null);
+    setForm({ ...EMPTY_FORM });
+    setFormError("");
+    setShowForm(true);
+  };
+
+  const openEditForm = (eng: Engineer) => {
+    setEditId(eng.id);
+    setForm({
+      name: eng.name,
+      skills: eng.skills.join("; "),
+      experience_years: eng.experience_years?.toString() ?? "",
+      current_price: eng.current_price?.toString() ?? "",
+      desired_price_min: eng.desired_price_min?.toString() ?? "",
+      desired_price_max: eng.desired_price_max?.toString() ?? "",
+      status: eng.status,
+      preferred_areas: eng.preferred_areas,
+      available_from: eng.available_from,
+      notes: eng.notes,
+    });
+    setFormError("");
+    setShowForm(true);
+  };
+
+  const handleSave = async () => {
+    if (!form.name.trim()) {
+      setFormError("名前は必須です");
+      return;
+    }
+    setSaving(true);
+    setFormError("");
+
+    const skills = form.skills
+      .split(/[;；]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const safeInt = (v: string) => {
+      const n = parseInt(v);
+      return isNaN(n) ? null : n;
+    };
+
+    const payload = {
+      name: form.name.trim(),
+      skills,
+      experience_years: safeInt(form.experience_years),
+      current_price: safeInt(form.current_price),
+      desired_price_min: safeInt(form.desired_price_min),
+      desired_price_max: safeInt(form.desired_price_max),
+      status: form.status,
+      preferred_areas: form.preferred_areas,
+      available_from: form.available_from,
+      notes: form.notes,
+    };
+
+    try {
+      if (editId) {
+        await updateEngineer(editId, payload);
+      } else {
+        await createEngineer(payload);
+      }
+      setShowForm(false);
+      reload();
+    } catch (e) {
+      setFormError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: number, name: string) => {
+    if (!confirm(`${name} を削除しますか？`)) return;
+    try {
+      await deleteEngineer(id);
+      setExpandedId(null);
+      reload();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  // CSVインポート
+  const handleImport = async () => {
+    if (!csvFile) return;
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const result = await importEngineersCsv(csvFile);
+      setImportResult(result);
+      if (result.imported > 0) reload();
+    } catch (e) {
+      setImportResult({ imported: 0, errors: [(e as Error).message] });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  // アサイン追加
+  const handleAddAssignment = async () => {
+    if (!expandedId) return;
+    try {
+      const safeInt = (v: string) => {
+        const n = parseInt(v);
+        return isNaN(n) ? null : n;
+      };
+      await createAssignment(expandedId, {
+        ...assignForm,
+        unit_price: safeInt(assignForm.unit_price),
+      });
+      const d = await getEngineerDetail(expandedId);
+      setDetail(d);
+      setShowAssignForm(false);
+      setAssignForm({
+        company_name: "",
+        project_name: "",
+        start_date: "",
+        end_date: "",
+        unit_price: "",
+        status: "稼働中",
+        notes: "",
+      });
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const handleDeleteAssignment = async (assignId: number) => {
+    if (!confirm("このアサイン履歴を削除しますか？")) return;
+    try {
+      await deleteAssignment(assignId);
+      if (expandedId) {
+        const d = await getEngineerDetail(expandedId);
+        setDetail(d);
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  return (
+    <div>
+      {/* KPIバー */}
+      {stats && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {[
+            { label: "総数", value: stats.total, color: "var(--primary)" },
+            { label: "待機中", value: stats.waiting, color: "#22c55e" },
+            { label: "稼働中", value: stats.active, color: "#3b82f6" },
+            { label: "面談中", value: stats.interview, color: "#eab308" },
+          ].map((kpi) => (
+            <div
+              key={kpi.label}
+              className="rounded-xl p-4 shadow-sm border"
+              style={{ background: "var(--card-bg)", borderColor: "var(--border)" }}
+            >
+              <p className="text-xs text-slate-500">{kpi.label}</p>
+              <p className="text-2xl font-bold" style={{ color: kpi.color }}>
+                {kpi.value}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex gap-6 h-[calc(100vh-13rem)]">
+        {/* サイドバーフィルター */}
+        <div
+          className="w-64 shrink-0 rounded-xl p-4 shadow-sm border overflow-y-auto"
+          style={{ background: "var(--card-bg)", borderColor: "var(--border)" }}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-bold">検索フィルタ</h2>
+            <button onClick={clearFilters} className="text-xs text-blue-600 hover:underline">
+              クリア
+            </button>
+          </div>
+
+          {/* キーワード */}
+          <label className="block text-xs text-slate-500 mb-1">名前・備考</label>
+          <input
+            type="text"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            placeholder="名前で検索"
+            className="w-full mb-3 px-2 py-1.5 border rounded text-sm"
+            style={{ borderColor: "var(--border)" }}
+          />
+
+          {/* ステータス */}
+          <label className="block text-xs text-slate-500 mb-1">ステータス</label>
+          <div className="mb-3 space-y-1">
+            {(filters?.statuses ?? []).map((s) => (
+              <label key={s} className="flex items-center gap-2 text-xs cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedStatuses.includes(s)}
+                  onChange={() => toggleMulti(selectedStatuses, setSelectedStatuses, s)}
+                />
+                {s}
+              </label>
+            ))}
+          </div>
+
+          {/* スキル */}
+          <label className="block text-xs text-slate-500 mb-1">スキル</label>
+          <div className="max-h-32 overflow-y-auto mb-3 space-y-1">
+            {(filters?.skills ?? []).map((s) => (
+              <label key={s} className="flex items-center gap-2 text-xs cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedSkills.includes(s)}
+                  onChange={() => toggleMulti(selectedSkills, setSelectedSkills, s)}
+                />
+                {s}
+              </label>
+            ))}
+          </div>
+
+          {/* エリア */}
+          <label className="block text-xs text-slate-500 mb-1">希望エリア</label>
+          <div className="max-h-32 overflow-y-auto mb-3 space-y-1">
+            {(filters?.areas ?? []).map((a) => (
+              <label key={a} className="flex items-center gap-2 text-xs cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedAreas.includes(a)}
+                  onChange={() => toggleMulti(selectedAreas, setSelectedAreas, a)}
+                />
+                {a}
+              </label>
+            ))}
+          </div>
+
+          {/* 単価範囲 */}
+          <label className="block text-xs text-slate-500 mb-1">単価範囲（万円）</label>
+          <div className="flex gap-2 mb-3">
+            <input
+              type="number"
+              value={priceMin}
+              onChange={(e) => setPriceMin(e.target.value)}
+              placeholder="下限"
+              className="w-1/2 px-2 py-1.5 border rounded text-sm"
+              style={{ borderColor: "var(--border)" }}
+            />
+            <input
+              type="number"
+              value={priceMax}
+              onChange={(e) => setPriceMax(e.target.value)}
+              placeholder="上限"
+              className="w-1/2 px-2 py-1.5 border rounded text-sm"
+              style={{ borderColor: "var(--border)" }}
+            />
+          </div>
+        </div>
+
+        {/* メインコンテンツ */}
+        <div className="flex-1 min-w-0 overflow-y-auto">
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-xl font-bold">エンジニア管理</h1>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-slate-500">{total}名</span>
+              <button
+                onClick={openNewForm}
+                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                新規登録
+              </button>
+              <button
+                onClick={() => {
+                  setShowImport(!showImport);
+                  setImportResult(null);
+                  setCsvFile(null);
+                }}
+                className="px-3 py-1.5 bg-orange-500 text-white text-sm rounded-lg hover:bg-orange-600 transition-colors"
+              >
+                CSVインポート
+              </button>
+              <a
+                href={getEngineerExportURL(buildParams())}
+                className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
+              >
+                CSV出力
+              </a>
+            </div>
+          </div>
+
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              {error}
+            </div>
+          )}
+
+          {/* CSVインポートUI */}
+          {showImport && (
+            <div
+              className="mb-4 p-4 rounded-xl border"
+              style={{ background: "var(--card-bg)", borderColor: "var(--border)" }}
+            >
+              <h3 className="text-sm font-bold mb-2">CSVインポート</h3>
+              <p className="text-xs text-slate-500 mb-2">
+                CSV形式: 名前, ステータス, スキル(セミコロン区切り), 経験年数,
+                現在単価(万円), 希望単価下限(万円), 希望単価上限(万円),
+                希望エリア, 稼働可能日, 備考
+              </p>
+              <p className="text-xs text-slate-500 mb-3">
+                UTF-8またはShift_JIS対応。CSV出力でダウンロードしたファイルをテンプレートとして使えます。
+              </p>
+              <div className="flex items-center gap-3">
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={(e) => setCsvFile(e.target.files?.[0] ?? null)}
+                  className="text-sm"
+                />
+                <button
+                  onClick={handleImport}
+                  disabled={!csvFile || importing}
+                  className="px-3 py-1.5 bg-orange-500 text-white text-sm rounded-lg hover:bg-orange-600 disabled:opacity-50 transition-colors"
+                >
+                  {importing ? "処理中..." : "インポート実行"}
+                </button>
+              </div>
+              {importResult && (
+                <div className="mt-3 text-sm">
+                  <p className="text-green-700">
+                    {importResult.imported}件インポートしました
+                  </p>
+                  {importResult.errors.length > 0 && (
+                    <div className="mt-1 text-red-600">
+                      {importResult.errors.map((e, i) => (
+                        <p key={i}>{e}</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 登録/編集フォーム */}
+          {showForm && (
+            <div
+              className="mb-4 p-4 rounded-xl border"
+              style={{ background: "var(--card-bg)", borderColor: "var(--border)" }}
+            >
+              <h3 className="text-sm font-bold mb-3">
+                {editId ? "エンジニア編集" : "エンジニア新規登録"}
+              </h3>
+              {formError && (
+                <p className="text-red-600 text-sm mb-2">{formError}</p>
+              )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">名前 *</label>
+                  <input
+                    type="text"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    className="w-full px-2 py-1.5 border rounded text-sm"
+                    style={{ borderColor: "var(--border)" }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">
+                    スキル（セミコロン区切り）
+                  </label>
+                  <input
+                    type="text"
+                    value={form.skills}
+                    onChange={(e) => setForm({ ...form, skills: e.target.value })}
+                    placeholder="Java; Spring Boot; AWS"
+                    className="w-full px-2 py-1.5 border rounded text-sm"
+                    style={{ borderColor: "var(--border)" }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">経験年数</label>
+                  <input
+                    type="number"
+                    value={form.experience_years}
+                    onChange={(e) =>
+                      setForm({ ...form, experience_years: e.target.value })
+                    }
+                    className="w-full px-2 py-1.5 border rounded text-sm"
+                    style={{ borderColor: "var(--border)" }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">
+                    ステータス
+                  </label>
+                  <select
+                    value={form.status}
+                    onChange={(e) => setForm({ ...form, status: e.target.value })}
+                    className="w-full px-2 py-1.5 border rounded text-sm"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    <option value="待機中">待機中</option>
+                    <option value="稼働中">稼働中</option>
+                    <option value="面談中">面談中</option>
+                    <option value="休止中">休止中</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">
+                    現在単価（万円）
+                  </label>
+                  <input
+                    type="number"
+                    value={form.current_price}
+                    onChange={(e) =>
+                      setForm({ ...form, current_price: e.target.value })
+                    }
+                    className="w-full px-2 py-1.5 border rounded text-sm"
+                    style={{ borderColor: "var(--border)" }}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className="block text-xs text-slate-500 mb-1">
+                      希望単価 下限
+                    </label>
+                    <input
+                      type="number"
+                      value={form.desired_price_min}
+                      onChange={(e) =>
+                        setForm({ ...form, desired_price_min: e.target.value })
+                      }
+                      className="w-full px-2 py-1.5 border rounded text-sm"
+                      style={{ borderColor: "var(--border)" }}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-xs text-slate-500 mb-1">
+                      希望単価 上限
+                    </label>
+                    <input
+                      type="number"
+                      value={form.desired_price_max}
+                      onChange={(e) =>
+                        setForm({ ...form, desired_price_max: e.target.value })
+                      }
+                      className="w-full px-2 py-1.5 border rounded text-sm"
+                      style={{ borderColor: "var(--border)" }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">
+                    希望エリア（カンマ区切り）
+                  </label>
+                  <input
+                    type="text"
+                    value={form.preferred_areas}
+                    onChange={(e) =>
+                      setForm({ ...form, preferred_areas: e.target.value })
+                    }
+                    placeholder="東京23区, フルリモート"
+                    className="w-full px-2 py-1.5 border rounded text-sm"
+                    style={{ borderColor: "var(--border)" }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">
+                    稼働可能日
+                  </label>
+                  <input
+                    type="date"
+                    value={form.available_from}
+                    onChange={(e) =>
+                      setForm({ ...form, available_from: e.target.value })
+                    }
+                    className="w-full px-2 py-1.5 border rounded text-sm"
+                    style={{ borderColor: "var(--border)" }}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs text-slate-500 mb-1">備考</label>
+                  <textarea
+                    value={form.notes}
+                    onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                    rows={2}
+                    className="w-full px-2 py-1.5 border rounded text-sm"
+                    style={{ borderColor: "var(--border)" }}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                >
+                  {saving ? "保存中..." : editId ? "更新" : "登録"}
+                </button>
+                <button
+                  onClick={() => setShowForm(false)}
+                  className="px-4 py-1.5 bg-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* エンジニア一覧 */}
+          {loading ? (
+            <div className="flex items-center justify-center py-20 text-slate-400">
+              読み込み中...
+            </div>
+          ) : engineers.length === 0 ? (
+            <div className="text-center py-20 text-slate-400">
+              {total === 0
+                ? "エンジニアが登録されていません。「新規登録」から追加してください。"
+                : "条件に一致するエンジニアがいません"}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {/* テーブルヘッダー */}
+              <div
+                className="grid grid-cols-[1fr_80px_1fr_80px_120px_100px] gap-2 px-4 py-2 text-xs font-semibold text-slate-500 border-b"
+                style={{ borderColor: "var(--border)" }}
+              >
+                <span>名前</span>
+                <span>ステータス</span>
+                <span>スキル</span>
+                <span>経験年数</span>
+                <span>現在単価</span>
+                <span>稼働可能日</span>
+              </div>
+
+              {/* テーブル行 */}
+              {engineers.map((eng) => (
+                <div key={eng.id}>
+                  <div
+                    className="grid grid-cols-[1fr_80px_1fr_80px_120px_100px] gap-2 px-4 py-3 rounded-lg border cursor-pointer hover:bg-slate-50 transition-colors"
+                    style={{
+                      background: "var(--card-bg)",
+                      borderColor:
+                        expandedId === eng.id ? "var(--primary)" : "var(--border)",
+                    }}
+                    onClick={() => handleExpand(eng.id)}
+                  >
+                    <span className="text-sm font-medium truncate">{eng.name}</span>
+                    <span>
+                      <span
+                        className={`inline-block px-2 py-0.5 text-xs rounded-full ${STATUS_COLORS[eng.status] ?? "bg-gray-100 text-gray-500"}`}
+                      >
+                        {eng.status}
+                      </span>
+                    </span>
+                    <span className="text-xs text-slate-600 truncate">
+                      {eng.skills.join(", ")}
+                    </span>
+                    <span className="text-xs text-slate-600">
+                      {eng.experience_years != null ? `${eng.experience_years}年` : "-"}
+                    </span>
+                    <span className="text-xs font-medium">
+                      {eng.current_price != null ? `${eng.current_price}万` : "-"}
+                      {eng.desired_price_min != null || eng.desired_price_max != null ? (
+                        <span className="text-slate-400 ml-1">
+                          (希望{eng.desired_price_min ?? "?"}〜{eng.desired_price_max ?? "?"})
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="text-xs text-slate-600">
+                      {eng.available_from || "-"}
+                    </span>
+                  </div>
+
+                  {/* 展開詳細 */}
+                  {expandedId === eng.id && detail && (
+                    <div
+                      className="mx-2 mb-2 p-4 rounded-b-lg border border-t-0"
+                      style={{
+                        background: "#f8fafc",
+                        borderColor: "var(--primary)",
+                      }}
+                    >
+                      <div className="grid grid-cols-2 gap-4 text-sm mb-3">
+                        <div>
+                          <p>
+                            <span className="font-semibold">名前:</span> {detail.name}
+                          </p>
+                          <p>
+                            <span className="font-semibold">ステータス:</span>{" "}
+                            {detail.status}
+                          </p>
+                          <p>
+                            <span className="font-semibold">経験年数:</span>{" "}
+                            {detail.experience_years != null
+                              ? `${detail.experience_years}年`
+                              : "未記入"}
+                          </p>
+                          <p>
+                            <span className="font-semibold">稼働可能日:</span>{" "}
+                            {detail.available_from || "未記入"}
+                          </p>
+                        </div>
+                        <div>
+                          <p>
+                            <span className="font-semibold">現在単価:</span>{" "}
+                            {detail.current_price != null
+                              ? `${detail.current_price}万円`
+                              : "未記入"}
+                          </p>
+                          <p>
+                            <span className="font-semibold">希望単価:</span>{" "}
+                            {detail.desired_price_min != null ||
+                            detail.desired_price_max != null
+                              ? `${detail.desired_price_min ?? "?"}〜${detail.desired_price_max ?? "?"}万円`
+                              : "未記入"}
+                          </p>
+                          <p>
+                            <span className="font-semibold">希望エリア:</span>{" "}
+                            {detail.preferred_areas || "未記入"}
+                          </p>
+                          <p>
+                            <span className="font-semibold">スキル:</span>{" "}
+                            {detail.skills.join(", ") || "未記入"}
+                          </p>
+                        </div>
+                      </div>
+                      {detail.notes && (
+                        <p className="text-sm mb-3">
+                          <span className="font-semibold">備考:</span> {detail.notes}
+                        </p>
+                      )}
+
+                      <div className="flex gap-2 mb-4">
+                        <button
+                          onClick={() => openEditForm(eng)}
+                          className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
+                        >
+                          編集
+                        </button>
+                        <button
+                          onClick={() => handleDelete(eng.id, eng.name)}
+                          className="px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 transition-colors"
+                        >
+                          削除
+                        </button>
+                      </div>
+
+                      {/* アサイン履歴 */}
+                      <div
+                        className="p-3 rounded-lg"
+                        style={{ background: "#eef2ff", border: "1px solid #c7d2fe" }}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-sm font-semibold text-indigo-700">
+                            案件アサイン履歴
+                          </p>
+                          <button
+                            onClick={() => setShowAssignForm(!showAssignForm)}
+                            className="px-2 py-0.5 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 transition-colors"
+                          >
+                            追加
+                          </button>
+                        </div>
+
+                        {showAssignForm && (
+                          <div className="mb-3 p-3 bg-white rounded border border-indigo-200">
+                            <div className="grid grid-cols-2 gap-2 text-sm">
+                              <input
+                                type="text"
+                                placeholder="会社名"
+                                value={assignForm.company_name}
+                                onChange={(e) =>
+                                  setAssignForm({
+                                    ...assignForm,
+                                    company_name: e.target.value,
+                                  })
+                                }
+                                className="px-2 py-1 border rounded text-sm"
+                                style={{ borderColor: "var(--border)" }}
+                              />
+                              <input
+                                type="text"
+                                placeholder="案件名"
+                                value={assignForm.project_name}
+                                onChange={(e) =>
+                                  setAssignForm({
+                                    ...assignForm,
+                                    project_name: e.target.value,
+                                  })
+                                }
+                                className="px-2 py-1 border rounded text-sm"
+                                style={{ borderColor: "var(--border)" }}
+                              />
+                              <input
+                                type="date"
+                                placeholder="開始日"
+                                value={assignForm.start_date}
+                                onChange={(e) =>
+                                  setAssignForm({
+                                    ...assignForm,
+                                    start_date: e.target.value,
+                                  })
+                                }
+                                className="px-2 py-1 border rounded text-sm"
+                                style={{ borderColor: "var(--border)" }}
+                              />
+                              <input
+                                type="date"
+                                placeholder="終了日"
+                                value={assignForm.end_date}
+                                onChange={(e) =>
+                                  setAssignForm({
+                                    ...assignForm,
+                                    end_date: e.target.value,
+                                  })
+                                }
+                                className="px-2 py-1 border rounded text-sm"
+                                style={{ borderColor: "var(--border)" }}
+                              />
+                              <input
+                                type="number"
+                                placeholder="単価（万円）"
+                                value={assignForm.unit_price}
+                                onChange={(e) =>
+                                  setAssignForm({
+                                    ...assignForm,
+                                    unit_price: e.target.value,
+                                  })
+                                }
+                                className="px-2 py-1 border rounded text-sm"
+                                style={{ borderColor: "var(--border)" }}
+                              />
+                              <select
+                                value={assignForm.status}
+                                onChange={(e) =>
+                                  setAssignForm({
+                                    ...assignForm,
+                                    status: e.target.value,
+                                  })
+                                }
+                                className="px-2 py-1 border rounded text-sm"
+                                style={{ borderColor: "var(--border)" }}
+                              >
+                                <option value="稼働中">稼働中</option>
+                                <option value="終了">終了</option>
+                                <option value="中断">中断</option>
+                              </select>
+                            </div>
+                            <div className="flex gap-2 mt-2">
+                              <button
+                                onClick={handleAddAssignment}
+                                className="px-3 py-1 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 transition-colors"
+                              >
+                                追加
+                              </button>
+                              <button
+                                onClick={() => setShowAssignForm(false)}
+                                className="px-3 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300 transition-colors"
+                              >
+                                キャンセル
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {detail.assignments.length === 0 ? (
+                          <p className="text-xs text-slate-500">履歴なし</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {detail.assignments.map((a: EngineerAssignment) => (
+                              <div
+                                key={a.id}
+                                className="flex items-center justify-between bg-white p-2 rounded border border-indigo-100 text-sm"
+                              >
+                                <div>
+                                  <span className="font-medium">
+                                    {a.company_name || "不明"}
+                                  </span>
+                                  {a.project_name && (
+                                    <span className="text-slate-500 ml-2">
+                                      {a.project_name}
+                                    </span>
+                                  )}
+                                  <span className="text-xs text-slate-400 ml-2">
+                                    {a.start_date || "?"} 〜 {a.end_date || "継続中"}
+                                  </span>
+                                  {a.unit_price != null && (
+                                    <span className="text-xs text-blue-600 ml-2">
+                                      {a.unit_price}万
+                                    </span>
+                                  )}
+                                  <span
+                                    className={`ml-2 inline-block px-1.5 py-0.5 text-xs rounded ${
+                                      a.status === "稼働中"
+                                        ? "bg-blue-100 text-blue-700"
+                                        : a.status === "終了"
+                                          ? "bg-gray-100 text-gray-600"
+                                          : "bg-yellow-100 text-yellow-700"
+                                    }`}
+                                  >
+                                    {a.status}
+                                  </span>
+                                </div>
+                                <button
+                                  onClick={() => handleDeleteAssignment(a.id)}
+                                  className="text-red-400 hover:text-red-600 text-xs ml-2"
+                                >
+                                  削除
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

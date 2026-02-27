@@ -7,6 +7,7 @@ import { useState } from "react";
 const NAV_ITEMS = [
   { href: "/", label: "ダッシュボード", icon: "📊" },
   { href: "/search", label: "案件検索", icon: "🔍" },
+  { href: "/engineers", label: "エンジニア管理", icon: "👤" },
   { href: "/fetch", label: "メール取得", icon: "📧" },
   { href: "/settings", label: "設定", icon: "⚙️" },
 ];

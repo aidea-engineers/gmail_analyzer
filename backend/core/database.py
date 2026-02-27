@@ -151,6 +151,49 @@ CREATE TABLE IF NOT EXISTS fetch_log (
     errors          TEXT DEFAULT '[]',
     query_used      TEXT DEFAULT ''
 );
+
+CREATE TABLE IF NOT EXISTS engineers (
+    id              SERIAL PRIMARY KEY,
+    name            TEXT NOT NULL,
+    experience_years INTEGER,
+    current_price   INTEGER,
+    desired_price_min INTEGER,
+    desired_price_max INTEGER,
+    status          TEXT DEFAULT '待機中',
+    preferred_areas TEXT DEFAULT '',
+    available_from  TEXT DEFAULT '',
+    notes           TEXT DEFAULT '',
+    created_at      TIMESTAMP DEFAULT NOW(),
+    updated_at      TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS engineer_skills (
+    id              SERIAL PRIMARY KEY,
+    engineer_id     INTEGER NOT NULL REFERENCES engineers(id) ON DELETE CASCADE,
+    skill_name      TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_eng_skills_name
+    ON engineer_skills(skill_name);
+CREATE INDEX IF NOT EXISTS idx_eng_skills_engineer
+    ON engineer_skills(engineer_id);
+
+CREATE TABLE IF NOT EXISTS engineer_assignments (
+    id              SERIAL PRIMARY KEY,
+    engineer_id     INTEGER NOT NULL REFERENCES engineers(id) ON DELETE CASCADE,
+    listing_id      INTEGER REFERENCES job_listings(id) ON DELETE SET NULL,
+    company_name    TEXT DEFAULT '',
+    project_name    TEXT DEFAULT '',
+    start_date      TEXT DEFAULT '',
+    end_date        TEXT DEFAULT '',
+    unit_price      INTEGER,
+    status          TEXT DEFAULT '稼働中',
+    notes           TEXT DEFAULT '',
+    created_at      TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_eng_assignments_engineer
+    ON engineer_assignments(engineer_id);
 """
 
 _SQLITE_SCHEMA = """
@@ -218,6 +261,52 @@ CREATE TABLE IF NOT EXISTS fetch_log (
     errors          TEXT DEFAULT '[]',
     query_used      TEXT DEFAULT ''
 );
+
+CREATE TABLE IF NOT EXISTS engineers (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    name            TEXT NOT NULL,
+    experience_years INTEGER,
+    current_price   INTEGER,
+    desired_price_min INTEGER,
+    desired_price_max INTEGER,
+    status          TEXT DEFAULT '待機中',
+    preferred_areas TEXT DEFAULT '',
+    available_from  TEXT DEFAULT '',
+    notes           TEXT DEFAULT '',
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS engineer_skills (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    engineer_id     INTEGER NOT NULL,
+    skill_name      TEXT NOT NULL,
+    FOREIGN KEY (engineer_id) REFERENCES engineers(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_eng_skills_name
+    ON engineer_skills(skill_name);
+CREATE INDEX IF NOT EXISTS idx_eng_skills_engineer
+    ON engineer_skills(engineer_id);
+
+CREATE TABLE IF NOT EXISTS engineer_assignments (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    engineer_id     INTEGER NOT NULL,
+    listing_id      INTEGER,
+    company_name    TEXT DEFAULT '',
+    project_name    TEXT DEFAULT '',
+    start_date      TEXT DEFAULT '',
+    end_date        TEXT DEFAULT '',
+    unit_price      INTEGER,
+    status          TEXT DEFAULT '稼働中',
+    notes           TEXT DEFAULT '',
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (engineer_id) REFERENCES engineers(id) ON DELETE CASCADE,
+    FOREIGN KEY (listing_id) REFERENCES job_listings(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_eng_assignments_engineer
+    ON engineer_assignments(engineer_id);
 """
 
 
@@ -818,3 +907,260 @@ def clear_old_email_bodies(days: int = 7) -> int:
                 (f"-{days}",),
             )
         return cursor.rowcount
+
+
+# --- Engineer CRUD ---
+
+def insert_engineer(data: dict) -> int:
+    """エンジニアを登録し、IDを返す。スキルも同時に挿入する。"""
+    with get_connection() as conn:
+        sql = """INSERT INTO engineers
+                 (name, experience_years, current_price,
+                  desired_price_min, desired_price_max,
+                  status, preferred_areas, available_from, notes)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+        params = (
+            data["name"],
+            data.get("experience_years"),
+            data.get("current_price"),
+            data.get("desired_price_min"),
+            data.get("desired_price_max"),
+            data.get("status", "待機中"),
+            data.get("preferred_areas", ""),
+            data.get("available_from", ""),
+            data.get("notes", ""),
+        )
+        if conn.is_pg:
+            cursor = conn.execute(sql + " RETURNING id", params)
+            eng_id = cursor.fetchone()["id"]
+        else:
+            cursor = conn.execute(sql, params)
+            eng_id = cursor.lastrowid
+
+        for skill in data.get("skills", []):
+            if skill.strip():
+                conn.execute(
+                    "INSERT INTO engineer_skills (engineer_id, skill_name) VALUES (?, ?)",
+                    (eng_id, skill.strip()),
+                )
+        return eng_id
+
+
+def update_engineer(eng_id: int, data: dict) -> bool:
+    """エンジニア情報を更新する。スキルは全削除→再挿入。"""
+    with get_connection() as conn:
+        sets = []
+        params = []
+        field_map = {
+            "name": "name", "experience_years": "experience_years",
+            "current_price": "current_price",
+            "desired_price_min": "desired_price_min",
+            "desired_price_max": "desired_price_max",
+            "status": "status", "preferred_areas": "preferred_areas",
+            "available_from": "available_from", "notes": "notes",
+        }
+        for key, col in field_map.items():
+            if key in data:
+                sets.append(f"{col} = ?")
+                params.append(data[key])
+
+        if not sets:
+            return False
+
+        if conn.is_pg:
+            sets.append("updated_at = NOW()")
+        else:
+            sets.append("updated_at = CURRENT_TIMESTAMP")
+
+        params.append(eng_id)
+        sql = f"UPDATE engineers SET {', '.join(sets)} WHERE id = ?"
+        conn.execute(sql, params)
+
+        # スキルが指定されていれば全削除→再挿入
+        if "skills" in data:
+            conn.execute(
+                "DELETE FROM engineer_skills WHERE engineer_id = ?", (eng_id,)
+            )
+            for skill in data["skills"]:
+                if skill.strip():
+                    conn.execute(
+                        "INSERT INTO engineer_skills (engineer_id, skill_name) VALUES (?, ?)",
+                        (eng_id, skill.strip()),
+                    )
+        return True
+
+
+def delete_engineer(eng_id: int) -> bool:
+    """エンジニアを削除する（CASCADE でスキル・履歴も削除）。"""
+    with get_connection() as conn:
+        cursor = conn.execute("DELETE FROM engineers WHERE id = ?", (eng_id,))
+        return cursor.rowcount > 0
+
+
+def get_engineer(eng_id: int) -> Optional[dict]:
+    """エンジニア詳細をスキル+アサイン履歴付きで返す。"""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM engineers WHERE id = ?", (eng_id,)
+        ).fetchone()
+        if not row:
+            return None
+        eng = dict(row)
+
+        skills = conn.execute(
+            "SELECT skill_name FROM engineer_skills WHERE engineer_id = ? ORDER BY skill_name",
+            (eng_id,),
+        ).fetchall()
+        eng["skills"] = [s["skill_name"] for s in skills]
+
+        assignments = conn.execute(
+            """SELECT ea.*, jl.work_area as listing_area
+               FROM engineer_assignments ea
+               LEFT JOIN job_listings jl ON ea.listing_id = jl.id
+               WHERE ea.engineer_id = ?
+               ORDER BY ea.start_date DESC""",
+            (eng_id,),
+        ).fetchall()
+        eng["assignments"] = [dict(a) for a in assignments]
+
+        return eng
+
+
+def search_engineers(
+    keyword: str = "",
+    skills: list[str] | None = None,
+    statuses: list[str] | None = None,
+    areas: list[str] | None = None,
+    price_min: int | None = None,
+    price_max: int | None = None,
+) -> list[dict]:
+    """エンジニアをフィルター検索する。"""
+    query = """
+        SELECT DISTINCT e.*
+        FROM engineers e
+        LEFT JOIN engineer_skills es ON es.engineer_id = e.id
+        WHERE 1=1
+    """
+    params: list = []
+
+    if keyword:
+        query += " AND (e.name LIKE ? OR e.notes LIKE ?)"
+        like = f"%{keyword}%"
+        params.extend([like, like])
+
+    if skills:
+        placeholders = ",".join("?" * len(skills))
+        query += f" AND es.skill_name IN ({placeholders})"
+        params.extend(skills)
+
+    if statuses:
+        placeholders = ",".join("?" * len(statuses))
+        query += f" AND e.status IN ({placeholders})"
+        params.extend(statuses)
+
+    if areas:
+        area_conditions = " OR ".join("e.preferred_areas LIKE ?" for _ in areas)
+        query += f" AND ({area_conditions})"
+        params.extend(f"%{a}%" for a in areas)
+
+    if price_min is not None:
+        query += " AND (e.desired_price_max >= ? OR e.current_price >= ?)"
+        params.extend([price_min, price_min])
+
+    if price_max is not None:
+        query += " AND (e.desired_price_min <= ? OR e.current_price <= ?)"
+        params.extend([price_max, price_max])
+
+    query += " ORDER BY e.updated_at DESC"
+
+    with get_connection() as conn:
+        rows = conn.execute(query, params).fetchall()
+        results = []
+        for row in rows:
+            eng = dict(row)
+            sk = conn.execute(
+                "SELECT skill_name FROM engineer_skills WHERE engineer_id = ?",
+                (eng["id"],),
+            ).fetchall()
+            eng["skills"] = [s["skill_name"] for s in sk]
+            results.append(eng)
+        return results
+
+
+def get_engineer_stats() -> dict:
+    """エンジニアのステータス別統計を返す。"""
+    with get_connection() as conn:
+        total = conn.execute(
+            "SELECT COUNT(*) as cnt FROM engineers"
+        ).fetchone()["cnt"]
+        rows = conn.execute(
+            "SELECT status, COUNT(*) as cnt FROM engineers GROUP BY status"
+        ).fetchall()
+        by_status = {r["status"]: r["cnt"] for r in rows}
+    return {
+        "total": total,
+        "waiting": by_status.get("待機中", 0),
+        "active": by_status.get("稼働中", 0),
+        "interview": by_status.get("面談中", 0),
+        "inactive": by_status.get("休止中", 0),
+    }
+
+
+def get_distinct_engineer_skills() -> list[str]:
+    """エンジニアに登録されたスキル一覧を返す。"""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT skill_name FROM engineer_skills ORDER BY skill_name"
+        ).fetchall()
+        return [r["skill_name"] for r in rows]
+
+
+def get_distinct_engineer_areas() -> list[str]:
+    """エンジニアに登録された希望エリア一覧を返す。"""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT preferred_areas FROM engineers WHERE preferred_areas != '' ORDER BY preferred_areas"
+        ).fetchall()
+        # カンマ区切りを展開してユニークにする
+        areas = set()
+        for r in rows:
+            for a in r["preferred_areas"].split(","):
+                a = a.strip()
+                if a:
+                    areas.add(a)
+        return sorted(areas)
+
+
+def insert_assignment(engineer_id: int, data: dict) -> int:
+    """エンジニアのアサイン履歴を追加する。"""
+    with get_connection() as conn:
+        sql = """INSERT INTO engineer_assignments
+                 (engineer_id, listing_id, company_name, project_name,
+                  start_date, end_date, unit_price, status, notes)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+        params = (
+            engineer_id,
+            data.get("listing_id"),
+            data.get("company_name", ""),
+            data.get("project_name", ""),
+            data.get("start_date", ""),
+            data.get("end_date", ""),
+            data.get("unit_price"),
+            data.get("status", "稼働中"),
+            data.get("notes", ""),
+        )
+        if conn.is_pg:
+            cursor = conn.execute(sql + " RETURNING id", params)
+            return cursor.fetchone()["id"]
+        else:
+            cursor = conn.execute(sql, params)
+            return cursor.lastrowid
+
+
+def delete_assignment(assignment_id: int) -> bool:
+    """アサイン履歴を削除する。"""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "DELETE FROM engineer_assignments WHERE id = ?", (assignment_id,)
+        )
+        return cursor.rowcount > 0

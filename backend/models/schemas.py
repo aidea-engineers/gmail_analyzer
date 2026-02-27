@@ -70,3 +70,45 @@ class BatchResult(BaseModel):
     api_errors: int = 0
     errors: list[str] = Field(default_factory=list)
     status: str = "completed"
+
+
+# --- Engineer schemas ---
+
+class EngineerCreate(BaseModel):
+    """エンジニア新規登録リクエスト"""
+    name: str = Field(..., description="氏名（必須）")
+    skills: list[str] = Field(default_factory=list, description="スキル一覧")
+    experience_years: Optional[int] = Field(None, description="経験年数")
+    current_price: Optional[int] = Field(None, description="現在の単価（万円）")
+    desired_price_min: Optional[int] = Field(None, description="希望単価下限（万円）")
+    desired_price_max: Optional[int] = Field(None, description="希望単価上限（万円）")
+    status: str = Field("待機中", description="ステータス（待機中/稼働中/面談中/休止中）")
+    preferred_areas: str = Field("", description="希望エリア（カンマ区切り）")
+    available_from: str = Field("", description="稼働可能日（YYYY-MM-DD）")
+    notes: str = Field("", description="備考")
+
+
+class EngineerUpdate(BaseModel):
+    """エンジニア更新リクエスト（部分更新可）"""
+    name: Optional[str] = None
+    skills: Optional[list[str]] = None
+    experience_years: Optional[int] = None
+    current_price: Optional[int] = None
+    desired_price_min: Optional[int] = None
+    desired_price_max: Optional[int] = None
+    status: Optional[str] = None
+    preferred_areas: Optional[str] = None
+    available_from: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class AssignmentCreate(BaseModel):
+    """アサイン履歴追加リクエスト"""
+    listing_id: Optional[int] = Field(None, description="案件ID（任意）")
+    company_name: str = Field("", description="会社名")
+    project_name: str = Field("", description="案件名")
+    start_date: str = Field("", description="開始日")
+    end_date: str = Field("", description="終了日")
+    unit_price: Optional[int] = Field(None, description="単価（万円）")
+    status: str = Field("稼働中", description="ステータス")
+    notes: str = Field("", description="備考")
