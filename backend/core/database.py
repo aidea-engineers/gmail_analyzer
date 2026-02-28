@@ -556,10 +556,10 @@ MIGRATIONS = [
 
 def _run_migrations(conn):
     """バージョン管理方式のマイグレーション実行。適用済みはスキップ。"""
-    cursor = conn.execute("SELECT COALESCE(MAX(version), 0) FROM schema_migrations")
+    cursor = conn.execute("SELECT COALESCE(MAX(version), 0) AS ver FROM schema_migrations")
     row = cursor.fetchone()
-    # sqlite3.Row / tuple / dict いずれでもインデックス0でアクセス可能
-    current_version = row[0]
+    # RealDictCursor(PG)はdictを返すので名前アクセス、SQLiteはインデックスも可
+    current_version = row["ver"] if isinstance(row, dict) else row[0]
 
     pending = [(v, desc, sql) for v, desc, sql in MIGRATIONS if v > current_version]
     if not pending:
