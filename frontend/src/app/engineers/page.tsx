@@ -28,16 +28,24 @@ import type {
 
 const EMPTY_FORM: EngineerForm = {
   name: "",
-  skills: "",
+  skills: [],
+  skills_other: "",
   experience_years: "",
   current_price: "",
   desired_price_min: "",
   desired_price_max: "",
   status: "待機中",
-  preferred_areas: "",
+  preferred_areas: [],
+  preferred_areas_other: "",
   available_from: "",
   notes: "",
   processes: [],
+  job_type_experience: [],
+  position_experience: [],
+  remote_preference: "",
+  career_desired_job_type: [],
+  career_desired_skills: "",
+  career_notes: "",
 };
 
 const SKILL_CATEGORY_COLORS: Record<string, string> = {
@@ -49,6 +57,15 @@ const SKILL_CATEGORY_COLORS: Record<string, string> = {
 };
 
 const SKILL_CATEGORY_ORDER = ["言語", "FW", "インフラ", "DB", "その他"];
+
+const SKILL_CHECKBOXES: Record<string, string[]> = {
+  "言語": ["Java", "Python", "TypeScript", "JavaScript", "Go", "C#", "Ruby", "PHP", "Swift", "Kotlin", "C", "C++", "Rust", "Scala", "Perl", "R", "COBOL", "VB.NET", "Dart", "Shell"],
+  "FW": ["React", "Vue.js", "Angular", "Next.js", "Spring Boot", "Django", "Flask", "Laravel", "Ruby on Rails", ".NET", "Express.js", "NestJS", "Flutter", "Unity"],
+  "インフラ": ["AWS", "Azure", "GCP", "Docker", "Kubernetes", "Terraform", "Linux", "Jenkins", "Ansible"],
+  "DB": ["PostgreSQL", "MySQL", "Oracle", "SQL Server", "MongoDB", "Redis", "DynamoDB", "Elasticsearch"],
+};
+
+const ALL_CHECKBOX_SKILLS = Object.values(SKILL_CHECKBOXES).flat();
 
 const STATUS_COLORS: Record<string, string> = {
   "待機中": "bg-green-100 text-green-800",
@@ -74,6 +91,9 @@ export default function EngineersPage() {
   const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
   const [priceMin, setPriceMin] = useState("");
   const [priceMax, setPriceMax] = useState("");
+  const [selectedJobTypes, setSelectedJobTypes] = useState<string[]>([]);
+  const [selectedPositions, setSelectedPositions] = useState<string[]>([]);
+  const [selectedRemote, setSelectedRemote] = useState<string[]>([]);
 
   // 展開・編集
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -117,8 +137,11 @@ export default function EngineersPage() {
     if (selectedAreas.length) params.areas = selectedAreas.join(",");
     if (priceMin) params.price_min = priceMin;
     if (priceMax) params.price_max = priceMax;
+    if (selectedJobTypes.length) params.job_types = selectedJobTypes.join(",");
+    if (selectedPositions.length) params.positions = selectedPositions.join(",");
+    if (selectedRemote.length) params.remote = selectedRemote.join(",");
     return params;
-  }, [keyword, selectedSkills, selectedStatuses, selectedAreas, priceMin, priceMax]);
+  }, [keyword, selectedSkills, selectedStatuses, selectedAreas, priceMin, priceMax, selectedJobTypes, selectedPositions, selectedRemote]);
 
   const doSearch = useCallback(() => {
     setLoading(true);
@@ -179,6 +202,9 @@ export default function EngineersPage() {
     setSelectedAreas([]);
     setPriceMin("");
     setPriceMax("");
+    setSelectedJobTypes([]);
+    setSelectedPositions([]);
+    setSelectedRemote([]);
   };
 
   // フォーム操作
@@ -191,18 +217,35 @@ export default function EngineersPage() {
 
   const openEditForm = (eng: Engineer) => {
     setEditId(eng.id);
+    const knownSkills = eng.skills.filter(s => ALL_CHECKBOX_SKILLS.includes(s));
+    const otherSkills = eng.skills.filter(s => !ALL_CHECKBOX_SKILLS.includes(s));
+    const areaOptions = filters?.area_options ?? [];
+    const knownAreas = eng.preferred_areas
+      ? eng.preferred_areas.split(",").map(s => s.trim()).filter(a => areaOptions.includes(a))
+      : [];
+    const otherAreas = eng.preferred_areas
+      ? eng.preferred_areas.split(",").map(s => s.trim()).filter(a => a && !areaOptions.includes(a))
+      : [];
     setForm({
       name: eng.name,
-      skills: eng.skills.join("; "),
+      skills: knownSkills,
+      skills_other: otherSkills.join("; "),
       experience_years: eng.experience_years?.toString() ?? "",
       current_price: eng.current_price?.toString() ?? "",
       desired_price_min: eng.desired_price_min?.toString() ?? "",
       desired_price_max: eng.desired_price_max?.toString() ?? "",
       status: eng.status,
-      preferred_areas: eng.preferred_areas,
+      preferred_areas: knownAreas,
+      preferred_areas_other: otherAreas.join(", "),
       available_from: eng.available_from,
       notes: eng.notes,
       processes: eng.processes ? eng.processes.split(",").map(s => s.trim()).filter(Boolean) : [],
+      job_type_experience: eng.job_type_experience ? eng.job_type_experience.split(",").map(s => s.trim()).filter(Boolean) : [],
+      position_experience: eng.position_experience ? eng.position_experience.split(",").map(s => s.trim()).filter(Boolean) : [],
+      remote_preference: eng.remote_preference || "",
+      career_desired_job_type: eng.career_desired_job_type ? eng.career_desired_job_type.split(",").map(s => s.trim()).filter(Boolean) : [],
+      career_desired_skills: eng.career_desired_skills || "",
+      career_notes: eng.career_notes || "",
     });
     setFormError("");
     setShowForm(true);
@@ -216,27 +259,39 @@ export default function EngineersPage() {
     setSaving(true);
     setFormError("");
 
-    const skills = form.skills
+    const otherSkills = form.skills_other
       .split(/[;；]/)
       .map((s) => s.trim())
       .filter(Boolean);
+    const allSkills = [...form.skills, ...otherSkills];
     const safeInt = (v: string) => {
       const n = parseInt(v);
       return isNaN(n) ? null : n;
     };
+    const otherAreasList = form.preferred_areas_other
+      .split(/[,、]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const allAreas = [...form.preferred_areas, ...otherAreasList];
 
     const payload = {
       name: form.name.trim(),
-      skills,
+      skills: allSkills,
       experience_years: safeInt(form.experience_years),
       current_price: safeInt(form.current_price),
       desired_price_min: safeInt(form.desired_price_min),
       desired_price_max: safeInt(form.desired_price_max),
       status: form.status,
-      preferred_areas: form.preferred_areas,
+      preferred_areas: allAreas.join(","),
       available_from: form.available_from,
       notes: form.notes,
       processes: form.processes.join(","),
+      job_type_experience: form.job_type_experience.join(","),
+      position_experience: form.position_experience.join(","),
+      remote_preference: form.remote_preference,
+      career_desired_job_type: form.career_desired_job_type.join(","),
+      career_desired_skills: form.career_desired_skills,
+      career_notes: form.career_notes,
     };
 
     try {
@@ -417,6 +472,51 @@ export default function EngineersPage() {
             ))}
           </div>
 
+          {/* 職種経験 */}
+          {filters?.job_type_options && filters.job_type_options.length > 0 && (
+            <>
+              <label className="block text-xs text-slate-500 mb-1">職種経験</label>
+              <div className="max-h-28 overflow-y-auto mb-3 space-y-1">
+                {filters.job_type_options.map((jt) => (
+                  <label key={jt} className="flex items-center gap-2 text-xs cursor-pointer">
+                    <input type="checkbox" checked={selectedJobTypes.includes(jt)} onChange={() => toggleMulti(selectedJobTypes, setSelectedJobTypes, jt)} />
+                    {jt}
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* ポジション */}
+          {filters?.position_options && filters.position_options.length > 0 && (
+            <>
+              <label className="block text-xs text-slate-500 mb-1">ポジション</label>
+              <div className="max-h-28 overflow-y-auto mb-3 space-y-1">
+                {filters.position_options.map((pos) => (
+                  <label key={pos} className="flex items-center gap-2 text-xs cursor-pointer">
+                    <input type="checkbox" checked={selectedPositions.includes(pos)} onChange={() => toggleMulti(selectedPositions, setSelectedPositions, pos)} />
+                    {pos}
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* リモート */}
+          {filters?.remote_options && filters.remote_options.length > 0 && (
+            <>
+              <label className="block text-xs text-slate-500 mb-1">リモート希望</label>
+              <div className="mb-3 space-y-1">
+                {filters.remote_options.map((rem) => (
+                  <label key={rem} className="flex items-center gap-2 text-xs cursor-pointer">
+                    <input type="checkbox" checked={selectedRemote.includes(rem)} onChange={() => toggleMulti(selectedRemote, setSelectedRemote, rem)} />
+                    {rem}
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+
           {/* 単価範囲 */}
           <label className="block text-xs text-slate-500 mb-1">単価範囲（万円）</label>
           <div className="flex gap-2 mb-3">
@@ -535,161 +635,193 @@ export default function EngineersPage() {
               {formError && (
                 <p className="text-red-600 text-sm mb-2">{formError}</p>
               )}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">名前 *</label>
-                  <input
-                    type="text"
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    className="w-full px-2 py-1.5 border rounded text-sm"
-                    style={{ borderColor: "var(--border)" }}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">
-                    スキル（セミコロン区切り）
-                  </label>
-                  <input
-                    type="text"
-                    value={form.skills}
-                    onChange={(e) => setForm({ ...form, skills: e.target.value })}
-                    placeholder="Java; Spring Boot; AWS"
-                    className="w-full px-2 py-1.5 border rounded text-sm"
-                    style={{ borderColor: "var(--border)" }}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">経験年数</label>
-                  <input
-                    type="number"
-                    value={form.experience_years}
-                    onChange={(e) =>
-                      setForm({ ...form, experience_years: e.target.value })
-                    }
-                    className="w-full px-2 py-1.5 border rounded text-sm"
-                    style={{ borderColor: "var(--border)" }}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">
-                    ステータス
-                  </label>
-                  <select
-                    value={form.status}
-                    onChange={(e) => setForm({ ...form, status: e.target.value })}
-                    className="w-full px-2 py-1.5 border rounded text-sm"
-                    style={{ borderColor: "var(--border)" }}
-                  >
-                    <option value="待機中">待機中</option>
-                    <option value="稼働中">稼働中</option>
-                    <option value="面談中">面談中</option>
-                    <option value="休止中">休止中</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">
-                    現在単価（万円）
-                  </label>
-                  <input
-                    type="number"
-                    value={form.current_price}
-                    onChange={(e) =>
-                      setForm({ ...form, current_price: e.target.value })
-                    }
-                    className="w-full px-2 py-1.5 border rounded text-sm"
-                    style={{ borderColor: "var(--border)" }}
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <label className="block text-xs text-slate-500 mb-1">
-                      希望単価 下限
-                    </label>
-                    <input
-                      type="number"
-                      value={form.desired_price_min}
-                      onChange={(e) =>
-                        setForm({ ...form, desired_price_min: e.target.value })
-                      }
-                      className="w-full px-2 py-1.5 border rounded text-sm"
-                      style={{ borderColor: "var(--border)" }}
-                    />
+
+              {/* セクション1: 基本情報 */}
+              <div className="mb-4">
+                <h4 className="text-xs font-bold text-slate-600 mb-2 border-b pb-1" style={{ borderColor: "var(--border)" }}>基本情報</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">名前 *</label>
+                    <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-2 py-1.5 border rounded text-sm" style={{ borderColor: "var(--border)" }} />
                   </div>
-                  <div className="flex-1">
-                    <label className="block text-xs text-slate-500 mb-1">
-                      希望単価 上限
-                    </label>
-                    <input
-                      type="number"
-                      value={form.desired_price_max}
-                      onChange={(e) =>
-                        setForm({ ...form, desired_price_max: e.target.value })
-                      }
-                      className="w-full px-2 py-1.5 border rounded text-sm"
-                      style={{ borderColor: "var(--border)" }}
-                    />
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">ステータス</label>
+                    <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full px-2 py-1.5 border rounded text-sm" style={{ borderColor: "var(--border)" }}>
+                      <option value="待機中">待機中</option>
+                      <option value="稼働中">稼働中</option>
+                      <option value="面談中">面談中</option>
+                      <option value="休止中">休止中</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">経験年数</label>
+                    <input type="number" value={form.experience_years} onChange={(e) => setForm({ ...form, experience_years: e.target.value })} className="w-full px-2 py-1.5 border rounded text-sm" style={{ borderColor: "var(--border)" }} />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">現在単価（万円）</label>
+                    <input type="number" value={form.current_price} onChange={(e) => setForm({ ...form, current_price: e.target.value })} className="w-full px-2 py-1.5 border rounded text-sm" style={{ borderColor: "var(--border)" }} />
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <label className="block text-xs text-slate-500 mb-1">希望単価 下限</label>
+                      <input type="number" value={form.desired_price_min} onChange={(e) => setForm({ ...form, desired_price_min: e.target.value })} className="w-full px-2 py-1.5 border rounded text-sm" style={{ borderColor: "var(--border)" }} />
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-xs text-slate-500 mb-1">希望単価 上限</label>
+                      <input type="number" value={form.desired_price_max} onChange={(e) => setForm({ ...form, desired_price_max: e.target.value })} className="w-full px-2 py-1.5 border rounded text-sm" style={{ borderColor: "var(--border)" }} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">稼働可能日</label>
+                    <input type="date" value={form.available_from} onChange={(e) => setForm({ ...form, available_from: e.target.value })} className="w-full px-2 py-1.5 border rounded text-sm" style={{ borderColor: "var(--border)" }} />
                   </div>
                 </div>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">
-                    希望エリア（カンマ区切り）
-                  </label>
-                  <input
-                    type="text"
-                    value={form.preferred_areas}
-                    onChange={(e) =>
-                      setForm({ ...form, preferred_areas: e.target.value })
-                    }
-                    placeholder="東京23区, フルリモート"
-                    className="w-full px-2 py-1.5 border rounded text-sm"
-                    style={{ borderColor: "var(--border)" }}
-                  />
+              </div>
+
+              {/* セクション2: スキル */}
+              <div className="mb-4">
+                <h4 className="text-xs font-bold text-slate-600 mb-2 border-b pb-1" style={{ borderColor: "var(--border)" }}>スキル</h4>
+                {Object.entries(SKILL_CHECKBOXES).map(([cat, skillList]) => (
+                  <div key={cat} className="mb-2">
+                    <p className="text-xs text-slate-500 mb-1">{cat}</p>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1">
+                      {skillList.map((sk) => (
+                        <label key={sk} className="flex items-center gap-1 text-xs cursor-pointer">
+                          <input type="checkbox" checked={form.skills.includes(sk)} onChange={() => {
+                            const next = form.skills.includes(sk) ? form.skills.filter(s => s !== sk) : [...form.skills, sk];
+                            setForm({ ...form, skills: next });
+                          }} />
+                          {sk}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <div className="mt-2">
+                  <label className="block text-xs text-slate-500 mb-1">その他スキル（セミコロン区切り）</label>
+                  <input type="text" value={form.skills_other} onChange={(e) => setForm({ ...form, skills_other: e.target.value })} placeholder="Nuxt.js; GraphQL" className="w-full px-2 py-1.5 border rounded text-sm" style={{ borderColor: "var(--border)" }} />
                 </div>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">
-                    稼働可能日
-                  </label>
-                  <input
-                    type="date"
-                    value={form.available_from}
-                    onChange={(e) =>
-                      setForm({ ...form, available_from: e.target.value })
-                    }
-                    className="w-full px-2 py-1.5 border rounded text-sm"
-                    style={{ borderColor: "var(--border)" }}
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-xs text-slate-500 mb-1">対応工程</label>
-                  <div className="flex flex-wrap gap-3">
-                    {(filters?.process_options ?? ["要件定義", "基本設計", "詳細設計", "実装", "テスト", "運用保守"]).map((proc) => (
-                      <label key={proc} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={form.processes.includes(proc)}
-                          onChange={() => {
-                            const next = form.processes.includes(proc)
-                              ? form.processes.filter(p => p !== proc)
-                              : [...form.processes, proc];
+              </div>
+
+              {/* セクション3: 経験 */}
+              <div className="mb-4">
+                <h4 className="text-xs font-bold text-slate-600 mb-2 border-b pb-1" style={{ borderColor: "var(--border)" }}>経験</h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">職種経験</label>
+                    <div className="flex flex-wrap gap-3">
+                      {(filters?.job_type_options ?? []).map((jt) => (
+                        <label key={jt} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                          <input type="checkbox" checked={form.job_type_experience.includes(jt)} onChange={() => {
+                            const next = form.job_type_experience.includes(jt) ? form.job_type_experience.filter(v => v !== jt) : [...form.job_type_experience, jt];
+                            setForm({ ...form, job_type_experience: next });
+                          }} />
+                          {jt}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">ポジション経験</label>
+                    <div className="flex flex-wrap gap-3">
+                      {(filters?.position_options ?? []).map((pos) => (
+                        <label key={pos} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                          <input type="checkbox" checked={form.position_experience.includes(pos)} onChange={() => {
+                            const next = form.position_experience.includes(pos) ? form.position_experience.filter(v => v !== pos) : [...form.position_experience, pos];
+                            setForm({ ...form, position_experience: next });
+                          }} />
+                          {pos}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">対応工程</label>
+                    <div className="flex flex-wrap gap-3">
+                      {(filters?.process_options ?? ["要件定義", "基本設計", "詳細設計", "実装", "テスト", "運用保守"]).map((proc) => (
+                        <label key={proc} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                          <input type="checkbox" checked={form.processes.includes(proc)} onChange={() => {
+                            const next = form.processes.includes(proc) ? form.processes.filter(p => p !== proc) : [...form.processes, proc];
                             setForm({ ...form, processes: next });
-                          }}
-                        />
-                        {proc}
-                      </label>
-                    ))}
+                          }} />
+                          {proc}
+                        </label>
+                      ))}
+                    </div>
                   </div>
                 </div>
-                <div className="md:col-span-2">
-                  <label className="block text-xs text-slate-500 mb-1">備考</label>
-                  <textarea
-                    value={form.notes}
-                    onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                    rows={2}
-                    className="w-full px-2 py-1.5 border rounded text-sm"
-                    style={{ borderColor: "var(--border)" }}
-                  />
+              </div>
+
+              {/* セクション4: 勤務条件 */}
+              <div className="mb-4">
+                <h4 className="text-xs font-bold text-slate-600 mb-2 border-b pb-1" style={{ borderColor: "var(--border)" }}>勤務条件</h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">リモート希望</label>
+                    <div className="flex flex-wrap gap-3">
+                      {(filters?.remote_options ?? []).map((opt) => (
+                        <label key={opt} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                          <input type="radio" name="remote_preference" value={opt} checked={form.remote_preference === opt} onChange={() => setForm({ ...form, remote_preference: opt })} />
+                          {opt}
+                        </label>
+                      ))}
+                      <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                        <input type="radio" name="remote_preference" value="" checked={form.remote_preference === ""} onChange={() => setForm({ ...form, remote_preference: "" })} />
+                        未選択
+                      </label>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">希望勤務地</label>
+                    <div className="flex flex-wrap gap-3">
+                      {(filters?.area_options ?? []).map((area) => (
+                        <label key={area} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                          <input type="checkbox" checked={form.preferred_areas.includes(area)} onChange={() => {
+                            const next = form.preferred_areas.includes(area) ? form.preferred_areas.filter(a => a !== area) : [...form.preferred_areas, area];
+                            setForm({ ...form, preferred_areas: next });
+                          }} />
+                          {area}
+                        </label>
+                      ))}
+                    </div>
+                    <input type="text" value={form.preferred_areas_other} onChange={(e) => setForm({ ...form, preferred_areas_other: e.target.value })} placeholder="その他（カンマ区切り）" className="mt-2 w-full px-2 py-1.5 border rounded text-sm" style={{ borderColor: "var(--border)" }} />
+                  </div>
                 </div>
+              </div>
+
+              {/* セクション5: 今後のキャリア */}
+              <div className="mb-4">
+                <h4 className="text-xs font-bold text-slate-600 mb-2 border-b pb-1" style={{ borderColor: "var(--border)" }}>今後のキャリア</h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">希望職種</label>
+                    <div className="flex flex-wrap gap-3">
+                      {(filters?.job_type_options ?? []).map((jt) => (
+                        <label key={jt} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                          <input type="checkbox" checked={form.career_desired_job_type.includes(jt)} onChange={() => {
+                            const next = form.career_desired_job_type.includes(jt) ? form.career_desired_job_type.filter(v => v !== jt) : [...form.career_desired_job_type, jt];
+                            setForm({ ...form, career_desired_job_type: next });
+                          }} />
+                          {jt}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">習得したいスキル</label>
+                    <input type="text" value={form.career_desired_skills} onChange={(e) => setForm({ ...form, career_desired_skills: e.target.value })} placeholder="Kubernetes; Go" className="w-full px-2 py-1.5 border rounded text-sm" style={{ borderColor: "var(--border)" }} />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">キャリアメモ</label>
+                    <textarea value={form.career_notes} onChange={(e) => setForm({ ...form, career_notes: e.target.value })} rows={2} className="w-full px-2 py-1.5 border rounded text-sm" style={{ borderColor: "var(--border)" }} />
+                  </div>
+                </div>
+              </div>
+
+              {/* セクション6: 備考 */}
+              <div className="mb-3">
+                <h4 className="text-xs font-bold text-slate-600 mb-2 border-b pb-1" style={{ borderColor: "var(--border)" }}>備考</h4>
+                <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} className="w-full px-2 py-1.5 border rounded text-sm" style={{ borderColor: "var(--border)" }} />
               </div>
               <div className="flex gap-2 mt-3">
                 <button
@@ -864,12 +996,45 @@ export default function EngineersPage() {
                         )}
                       </div>
 
-                      {/* 対応工程 */}
+                      {/* 経験・勤務条件 */}
+                      {detail.job_type_experience && (
+                        <p className="text-sm mb-1">
+                          <span className="font-semibold">職種経験:</span>{" "}
+                          {detail.job_type_experience.split(",").map(s => s.trim()).filter(Boolean).join(", ")}
+                        </p>
+                      )}
+                      {detail.position_experience && (
+                        <p className="text-sm mb-1">
+                          <span className="font-semibold">ポジション:</span>{" "}
+                          {detail.position_experience.split(",").map(s => s.trim()).filter(Boolean).join(", ")}
+                        </p>
+                      )}
                       {detail.processes && (
-                        <p className="text-sm mb-3">
+                        <p className="text-sm mb-1">
                           <span className="font-semibold">対応工程:</span>{" "}
                           {detail.processes.split(",").map(p => p.trim()).filter(Boolean).join(", ")}
                         </p>
+                      )}
+                      {detail.remote_preference && (
+                        <p className="text-sm mb-1">
+                          <span className="font-semibold">リモート:</span>{" "}
+                          {detail.remote_preference}
+                        </p>
+                      )}
+                      {/* キャリア */}
+                      {(detail.career_desired_job_type || detail.career_desired_skills || detail.career_notes) && (
+                        <div className="text-sm mt-2 mb-3 p-2 rounded" style={{ background: "#f0fdf4", border: "1px solid #bbf7d0" }}>
+                          <p className="font-semibold text-green-700 mb-1">今後のキャリア</p>
+                          {detail.career_desired_job_type && (
+                            <p><span className="text-slate-500">希望職種:</span> {detail.career_desired_job_type.split(",").map(s => s.trim()).filter(Boolean).join(", ")}</p>
+                          )}
+                          {detail.career_desired_skills && (
+                            <p><span className="text-slate-500">習得したいスキル:</span> {detail.career_desired_skills}</p>
+                          )}
+                          {detail.career_notes && (
+                            <p><span className="text-slate-500">メモ:</span> {detail.career_notes}</p>
+                          )}
+                        </div>
                       )}
                       {detail.notes && (
                         <p className="text-sm mb-3">

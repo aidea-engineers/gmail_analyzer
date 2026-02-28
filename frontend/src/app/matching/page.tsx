@@ -101,6 +101,7 @@ function MatchingContent() {
   );
   const [listingMatches, setListingMatches] = useState<ListingMatchResult[]>([]);
   const [loadingListings, setLoadingListings] = useState(false);
+  const [expandedListingId, setExpandedListingId] = useState<number | null>(null);
 
   // --- タブ2: 案件から探す ---
   const [recentListings, setRecentListings] = useState<JobListing[]>([]);
@@ -320,62 +321,100 @@ function MatchingContent() {
           ) : (
             <div className="space-y-2">
               {listingMatches.map((m) => (
-                <div
-                  key={m.listing.id}
-                  className="p-4 rounded-lg border"
-                  style={{ background: "var(--card-bg)", borderColor: "var(--border)" }}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 mb-1">
-                        <span className="font-medium text-sm">
-                          {m.listing.company_name || "不明"}
-                        </span>
-                        <ScoreBar score={m.score} />
-                        {m.proposal && (
-                          <span
-                            className={`px-2 py-0.5 text-xs rounded-full ${
-                              STATUS_COLORS[m.proposal.status] ?? ""
-                            }`}
-                          >
-                            {m.proposal.status}
+                <div key={m.listing.id}>
+                  <div
+                    className="p-4 rounded-lg border cursor-pointer hover:bg-slate-50 transition-colors"
+                    style={{
+                      background: "var(--card-bg)",
+                      borderColor: expandedListingId === m.listing.id ? "var(--primary)" : "var(--border)",
+                    }}
+                    onClick={() => setExpandedListingId(expandedListingId === m.listing.id ? null : m.listing.id)}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-1">
+                          <span className="font-medium text-sm">
+                            {m.listing.company_name || "不明"}
                           </span>
+                          <ScoreBar score={m.score} />
+                          {m.proposal && (
+                            <span
+                              className={`px-2 py-0.5 text-xs rounded-full ${
+                                STATUS_COLORS[m.proposal.status] ?? ""
+                              }`}
+                            >
+                              {m.proposal.status}
+                            </span>
+                          )}
+                        </div>
+                        <ScoreDetail detail={m.score_detail} />
+                        <div className="flex gap-4 mt-1 text-xs text-slate-500">
+                          <span>エリア: {m.listing.work_area || "-"}</span>
+                          <span>単価: {m.listing.unit_price || "-"}</span>
+                          <span>職種: {m.listing.job_type || "-"}</span>
+                        </div>
+                        {m.listing.required_skills && m.listing.required_skills.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {m.listing.required_skills.map((sk) => (
+                              <span
+                                key={sk}
+                                className={`px-1.5 py-0.5 text-xs rounded ${getSkillBadgeClass(sk, m.listing.categorized_skills)}`}
+                              >
+                                {sk}
+                              </span>
+                            ))}
+                          </div>
                         )}
                       </div>
-                      <ScoreDetail detail={m.score_detail} />
-                      <div className="flex gap-4 mt-1 text-xs text-slate-500">
-                        <span>エリア: {m.listing.work_area || "-"}</span>
-                        <span>単価: {m.listing.unit_price || "-"}</span>
-                        <span>職種: {m.listing.job_type || "-"}</span>
+                      <div className="ml-3 shrink-0" onClick={(e) => e.stopPropagation()}>
+                        {!m.proposal ? (
+                          <button
+                            onClick={() =>
+                              handlePropose(selectedEngineerId!, m.listing.id, m.score)
+                            }
+                            className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 transition-colors"
+                          >
+                            提案する
+                          </button>
+                        ) : (
+                          <span className="text-xs text-slate-400">提案済み</span>
+                        )}
                       </div>
-                      {m.listing.required_skills && m.listing.required_skills.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {m.listing.required_skills.map((sk) => (
-                            <span
-                              key={sk}
-                              className={`px-1.5 py-0.5 text-xs rounded ${getSkillBadgeClass(sk, m.listing.categorized_skills)}`}
-                            >
-                              {sk}
-                            </span>
-                          ))}
+                    </div>
+                  </div>
+                  {/* 案件展開詳細 */}
+                  {expandedListingId === m.listing.id && (
+                    <div
+                      className="mx-2 mb-2 p-4 rounded-b-lg border border-t-0"
+                      style={{ background: "#f8fafc", borderColor: "var(--primary)" }}
+                    >
+                      <div className="grid grid-cols-2 gap-4 text-sm mb-2">
+                        <div>
+                          <p><span className="font-semibold">会社名:</span> {m.listing.company_name || "-"}</p>
+                          <p><span className="font-semibold">職種:</span> {m.listing.job_type || "-"}</p>
+                          <p><span className="font-semibold">エリア:</span> {m.listing.work_area || "-"}</p>
+                          <p><span className="font-semibold">単価:</span> {m.listing.unit_price || "-"}</p>
+                        </div>
+                        <div>
+                          <p><span className="font-semibold">参画月:</span> {m.listing.start_month || "-"}</p>
+                          <p><span className="font-semibold">受信日:</span> {m.listing.received_at?.slice(0, 10) || "-"}</p>
+                          <p><span className="font-semibold">件名:</span> {m.listing.subject || "-"}</p>
+                        </div>
+                      </div>
+                      {m.listing.project_details && (
+                        <div className="text-sm mb-2">
+                          <p className="font-semibold mb-1">案件詳細:</p>
+                          <p className="text-slate-600 whitespace-pre-wrap text-xs bg-white p-2 rounded border" style={{ borderColor: "var(--border)" }}>{m.listing.project_details}</p>
+                        </div>
+                      )}
+                      {m.listing.requirements && (
+                        <div className="text-sm">
+                          <p className="font-semibold mb-1">必須要件:</p>
+                          <p className="text-slate-600 whitespace-pre-wrap text-xs bg-white p-2 rounded border" style={{ borderColor: "var(--border)" }}>{m.listing.requirements}</p>
                         </div>
                       )}
                     </div>
-                    <div className="ml-3 shrink-0">
-                      {!m.proposal ? (
-                        <button
-                          onClick={() =>
-                            handlePropose(selectedEngineerId!, m.listing.id, m.score)
-                          }
-                          className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 transition-colors"
-                        >
-                          提案する
-                        </button>
-                      ) : (
-                        <span className="text-xs text-slate-400">提案済み</span>
-                      )}
-                    </div>
-                  </div>
+                  )}
                 </div>
               ))}
             </div>

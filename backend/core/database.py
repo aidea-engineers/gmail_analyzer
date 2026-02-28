@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from contextlib import contextmanager
 from datetime import datetime
@@ -8,6 +9,8 @@ from pathlib import Path
 from typing import Optional
 
 from config import Config
+
+logger = logging.getLogger(__name__)
 
 # --- Database backend detection ---
 
@@ -164,6 +167,12 @@ CREATE TABLE IF NOT EXISTS engineers (
     available_from  TEXT DEFAULT '',
     notes           TEXT DEFAULT '',
     processes       TEXT DEFAULT '',
+    job_type_experience TEXT DEFAULT '',
+    position_experience TEXT DEFAULT '',
+    remote_preference TEXT DEFAULT '',
+    career_desired_job_type TEXT DEFAULT '',
+    career_desired_skills TEXT DEFAULT '',
+    career_notes    TEXT DEFAULT '',
     created_at      TIMESTAMP DEFAULT NOW(),
     updated_at      TIMESTAMP DEFAULT NOW()
 );
@@ -294,6 +303,12 @@ CREATE TABLE IF NOT EXISTS engineers (
     available_from  TEXT DEFAULT '',
     notes           TEXT DEFAULT '',
     processes       TEXT DEFAULT '',
+    job_type_experience TEXT DEFAULT '',
+    position_experience TEXT DEFAULT '',
+    remote_preference TEXT DEFAULT '',
+    career_desired_job_type TEXT DEFAULT '',
+    career_desired_skills TEXT DEFAULT '',
+    career_notes    TEXT DEFAULT '',
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -352,34 +367,36 @@ CREATE INDEX IF NOT EXISTS idx_proposals_status
 """
 
 
+def _safe_add_column(conn, table: str, column: str, col_type: str = "TEXT DEFAULT ''"):
+    """カラム追加マイグレーション。既存カラムはスキップ、それ以外のエラーはログ+再送出。"""
+    try:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        err_msg = str(e).lower()
+        # 「既に存在する」系のエラーは無視（PG: "already exists", SQLite: "duplicate column"）
+        if "already exists" in err_msg or "duplicate column" in err_msg:
+            pass
+        else:
+            logger.error("Migration failed: ALTER TABLE %s ADD COLUMN %s — %s", table, column, e)
+            raise
+
+
 def init_db():
     with get_connection() as conn:
         conn.executescript(_PG_SCHEMA if conn.is_pg else _SQLITE_SCHEMA)
         conn.commit()  # テーブル作成を確定（後続のALTER失敗でrollbackされないように）
-        # マイグレーション: start_month カラム追加
-        try:
-            conn.execute(
-                "ALTER TABLE job_listings ADD COLUMN start_month TEXT DEFAULT ''"
-            )
-            conn.commit()
-        except Exception:
-            conn.rollback()  # カラムが既に存在する場合は無視
-        # マイグレーション: requirements カラム追加
-        try:
-            conn.execute(
-                "ALTER TABLE job_listings ADD COLUMN requirements TEXT DEFAULT ''"
-            )
-            conn.commit()
-        except Exception:
-            conn.rollback()  # カラムが既に存在する場合は無視
-        # マイグレーション: engineers.processes カラム追加
-        try:
-            conn.execute(
-                "ALTER TABLE engineers ADD COLUMN processes TEXT DEFAULT ''"
-            )
-            conn.commit()
-        except Exception:
-            conn.rollback()
+        # マイグレーション: job_listings
+        _safe_add_column(conn, "job_listings", "start_month")
+        _safe_add_column(conn, "job_listings", "requirements")
+        # マイグレーション: engineers
+        for col in [
+            "processes",
+            "job_type_experience", "position_experience", "remote_preference",
+            "career_desired_job_type", "career_desired_skills", "career_notes",
+        ]:
+            _safe_add_column(conn, "engineers", col)
 
 
 # --- Email CRUD ---
@@ -968,8 +985,10 @@ def insert_engineer(data: dict) -> int:
         sql = """INSERT INTO engineers
                  (name, experience_years, current_price,
                   desired_price_min, desired_price_max,
-                  status, preferred_areas, available_from, notes, processes)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                  status, preferred_areas, available_from, notes, processes,
+                  job_type_experience, position_experience, remote_preference,
+                  career_desired_job_type, career_desired_skills, career_notes)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
         params = (
             data["name"],
             data.get("experience_years"),
@@ -981,6 +1000,12 @@ def insert_engineer(data: dict) -> int:
             data.get("available_from", ""),
             data.get("notes", ""),
             data.get("processes", ""),
+            data.get("job_type_experience", ""),
+            data.get("position_experience", ""),
+            data.get("remote_preference", ""),
+            data.get("career_desired_job_type", ""),
+            data.get("career_desired_skills", ""),
+            data.get("career_notes", ""),
         )
         if conn.is_pg:
             cursor = conn.execute(sql + " RETURNING id", params)
@@ -1011,6 +1036,12 @@ def update_engineer(eng_id: int, data: dict) -> bool:
             "status": "status", "preferred_areas": "preferred_areas",
             "available_from": "available_from", "notes": "notes",
             "processes": "processes",
+            "job_type_experience": "job_type_experience",
+            "position_experience": "position_experience",
+            "remote_preference": "remote_preference",
+            "career_desired_job_type": "career_desired_job_type",
+            "career_desired_skills": "career_desired_skills",
+            "career_notes": "career_notes",
         }
         for key, col in field_map.items():
             if key in data:
@@ -1086,6 +1117,9 @@ def search_engineers(
     areas: list[str] | None = None,
     price_min: int | None = None,
     price_max: int | None = None,
+    job_types: list[str] | None = None,
+    positions: list[str] | None = None,
+    remote: list[str] | None = None,
 ) -> list[dict]:
     """エンジニアをフィルター検索する。"""
     query = """
@@ -1123,6 +1157,21 @@ def search_engineers(
     if price_max is not None:
         query += " AND (e.desired_price_min <= ? OR e.current_price <= ?)"
         params.extend([price_max, price_max])
+
+    if job_types:
+        jt_conditions = " OR ".join("e.job_type_experience LIKE ?" for _ in job_types)
+        query += f" AND ({jt_conditions})"
+        params.extend(f"%{jt}%" for jt in job_types)
+
+    if positions:
+        pos_conditions = " OR ".join("e.position_experience LIKE ?" for _ in positions)
+        query += f" AND ({pos_conditions})"
+        params.extend(f"%{p}%" for p in positions)
+
+    if remote:
+        rem_conditions = " OR ".join("e.remote_preference LIKE ?" for _ in remote)
+        query += f" AND ({rem_conditions})"
+        params.extend(f"%{r}%" for r in remote)
 
     query += " ORDER BY e.updated_at DESC"
 

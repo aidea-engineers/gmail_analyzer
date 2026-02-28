@@ -140,6 +140,12 @@ export interface Engineer {
   notes: string;
   skills: string[];
   processes: string;
+  job_type_experience: string;
+  position_experience: string;
+  remote_preference: string;
+  career_desired_job_type: string;
+  career_desired_skills: string;
+  career_notes: string;
   categorized_skills: CategorizedSkills;
   created_at: string;
   updated_at: string;
@@ -177,6 +183,10 @@ export interface EngineerFilters {
   areas: string[];
   statuses: string[];
   process_options: string[];
+  job_type_options: string[];
+  position_options: string[];
+  remote_options: string[];
+  area_options: string[];
 }
 
 export interface EngineersResponse {
@@ -186,16 +196,24 @@ export interface EngineersResponse {
 
 export interface EngineerForm {
   name: string;
-  skills: string;
+  skills: string[];
+  skills_other: string;
   experience_years: string;
   current_price: string;
   desired_price_min: string;
   desired_price_max: string;
   status: string;
-  preferred_areas: string;
+  preferred_areas: string[];
+  preferred_areas_other: string;
   available_from: string;
   notes: string;
   processes: string[];
+  job_type_experience: string[];
+  position_experience: string[];
+  remote_preference: string;
+  career_desired_job_type: string[];
+  career_desired_skills: string;
+  career_notes: string;
 }
 
 export interface CsvImportResult {

@@ -24,7 +24,10 @@ from core.database import (
     delete_assignment,
 )
 from models.schemas import EngineerCreate, EngineerUpdate, AssignmentCreate
-from utils.text_helpers import normalize_skill_name, categorize_skills, PROCESS_OPTIONS
+from utils.text_helpers import (
+    normalize_skill_name, categorize_skills, PROCESS_OPTIONS,
+    JOB_TYPE_OPTIONS, POSITION_OPTIONS, REMOTE_OPTIONS, AREA_OPTIONS,
+)
 
 router = APIRouter(prefix="/api/engineers", tags=["engineers"])
 
@@ -51,6 +54,10 @@ def engineer_filters():
             "areas": get_distinct_engineer_areas(),
             "statuses": ["待機中", "稼働中", "面談中", "休止中"],
             "process_options": PROCESS_OPTIONS,
+            "job_type_options": JOB_TYPE_OPTIONS,
+            "position_options": POSITION_OPTIONS,
+            "remote_options": REMOTE_OPTIONS,
+            "area_options": AREA_OPTIONS,
         }
     except Exception as e:
         logger.exception("engineer_filters error")
@@ -65,12 +72,18 @@ def engineer_list(
     areas: Optional[str] = Query(None, description="カンマ区切りエリア"),
     price_min: Optional[int] = None,
     price_max: Optional[int] = None,
+    job_types: Optional[str] = Query(None, description="カンマ区切り職種経験"),
+    positions: Optional[str] = Query(None, description="カンマ区切りポジション"),
+    remote: Optional[str] = Query(None, description="カンマ区切りリモート希望"),
 ):
     """エンジニア一覧（フィルター付き）"""
     try:
         skills_list = [s.strip() for s in skills.split(",") if s.strip()] if skills else None
         statuses_list = [s.strip() for s in statuses.split(",") if s.strip()] if statuses else None
         areas_list = [a.strip() for a in areas.split(",") if a.strip()] if areas else None
+        job_types_list = [s.strip() for s in job_types.split(",") if s.strip()] if job_types else None
+        positions_list = [s.strip() for s in positions.split(",") if s.strip()] if positions else None
+        remote_list = [s.strip() for s in remote.split(",") if s.strip()] if remote else None
 
         results = search_engineers(
             keyword=keyword,
@@ -79,6 +92,9 @@ def engineer_list(
             areas=areas_list,
             price_min=price_min if price_min and price_min > 0 else None,
             price_max=price_max if price_max and price_max < 300 else None,
+            job_types=job_types_list,
+            positions=positions_list,
+            remote=remote_list,
         )
 
         engineers = []
@@ -97,6 +113,12 @@ def engineer_list(
                 "notes": r.get("notes", ""),
                 "skills": skills,
                 "processes": r.get("processes", ""),
+                "job_type_experience": r.get("job_type_experience", ""),
+                "position_experience": r.get("position_experience", ""),
+                "remote_preference": r.get("remote_preference", ""),
+                "career_desired_job_type": r.get("career_desired_job_type", ""),
+                "career_desired_skills": r.get("career_desired_skills", ""),
+                "career_notes": r.get("career_notes", ""),
                 "categorized_skills": categorize_skills(skills),
                 "created_at": str(r.get("created_at", "")),
                 "updated_at": str(r.get("updated_at", "")),
@@ -116,11 +138,17 @@ def engineer_export(
     areas: Optional[str] = None,
     price_min: Optional[int] = None,
     price_max: Optional[int] = None,
+    job_types: Optional[str] = Query(None, description="カンマ区切り職種経験"),
+    positions: Optional[str] = Query(None, description="カンマ区切りポジション"),
+    remote: Optional[str] = Query(None, description="カンマ区切りリモート希望"),
 ):
     """エンジニア一覧をCSVエクスポート（BOM付きUTF-8）"""
     skills_list = [s.strip() for s in skills.split(",") if s.strip()] if skills else None
     statuses_list = [s.strip() for s in statuses.split(",") if s.strip()] if statuses else None
     areas_list = [a.strip() for a in areas.split(",") if a.strip()] if areas else None
+    job_types_list = [s.strip() for s in job_types.split(",") if s.strip()] if job_types else None
+    positions_list = [s.strip() for s in positions.split(",") if s.strip()] if positions else None
+    remote_list = [s.strip() for s in remote.split(",") if s.strip()] if remote else None
 
     results = search_engineers(
         keyword=keyword,
@@ -129,6 +157,9 @@ def engineer_export(
         areas=areas_list,
         price_min=price_min if price_min and price_min > 0 else None,
         price_max=price_max if price_max and price_max < 300 else None,
+        job_types=job_types_list,
+        positions=positions_list,
+        remote=remote_list,
     )
 
     output = io.StringIO()
@@ -136,7 +167,10 @@ def engineer_export(
     writer.writerow([
         "名前", "ステータス", "スキル", "経験年数",
         "現在単価(万円)", "希望単価下限(万円)", "希望単価上限(万円)",
-        "希望エリア", "稼働可能日", "対応工程", "備考",
+        "希望エリア", "稼働可能日", "対応工程",
+        "職種経験", "ポジション経験", "リモート希望",
+        "キャリア希望職種", "習得したいスキル", "キャリアメモ",
+        "備考",
     ])
 
     for r in results:
@@ -151,6 +185,12 @@ def engineer_export(
             r.get("preferred_areas", ""),
             r.get("available_from", ""),
             r.get("processes", ""),
+            r.get("job_type_experience", ""),
+            r.get("position_experience", ""),
+            r.get("remote_preference", ""),
+            r.get("career_desired_job_type", ""),
+            r.get("career_desired_skills", ""),
+            r.get("career_notes", ""),
             r.get("notes", ""),
         ])
 
@@ -216,6 +256,12 @@ async def engineer_import_csv(file: UploadFile = File(...)):
             "preferred_areas": (row.get("希望エリア") or row.get("preferred_areas") or "").strip(),
             "available_from": (row.get("稼働可能日") or row.get("available_from") or "").strip(),
             "processes": (row.get("対応工程") or row.get("processes") or "").strip(),
+            "job_type_experience": (row.get("職種経験") or row.get("job_type_experience") or "").strip(),
+            "position_experience": (row.get("ポジション経験") or row.get("position_experience") or "").strip(),
+            "remote_preference": (row.get("リモート希望") or row.get("remote_preference") or "").strip(),
+            "career_desired_job_type": (row.get("キャリア希望職種") or row.get("career_desired_job_type") or "").strip(),
+            "career_desired_skills": (row.get("習得したいスキル") or row.get("career_desired_skills") or "").strip(),
+            "career_notes": (row.get("キャリアメモ") or row.get("career_notes") or "").strip(),
             "notes": (row.get("備考") or row.get("notes") or "").strip(),
         }
 

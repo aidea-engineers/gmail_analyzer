@@ -87,6 +87,12 @@ class EngineerCreate(BaseModel):
     available_from: str = Field("", description="稼働可能日（YYYY-MM-DD）")
     notes: str = Field("", description="備考")
     processes: str = Field("", description="対応工程（カンマ区切り）")
+    job_type_experience: str = Field("", description="職種経験（カンマ区切り）")
+    position_experience: str = Field("", description="ポジション経験（カンマ区切り）")
+    remote_preference: str = Field("", description="リモート希望")
+    career_desired_job_type: str = Field("", description="今後の希望職種（カンマ区切り）")
+    career_desired_skills: str = Field("", description="習得したいスキル")
+    career_notes: str = Field("", description="キャリアメモ")
 
 
 class EngineerUpdate(BaseModel):
@@ -102,6 +108,12 @@ class EngineerUpdate(BaseModel):
     available_from: Optional[str] = None
     notes: Optional[str] = None
     processes: Optional[str] = None
+    job_type_experience: Optional[str] = None
+    position_experience: Optional[str] = None
+    remote_preference: Optional[str] = None
+    career_desired_job_type: Optional[str] = None
+    career_desired_skills: Optional[str] = None
+    career_notes: Optional[str] = None
 
 
 class AssignmentCreate(BaseModel):

@@ -161,6 +161,13 @@ def categorize_skills(skill_names: list[str]) -> dict[str, list[str]]:
 
 PROCESS_OPTIONS = ["要件定義", "基本設計", "詳細設計", "実装", "テスト", "運用保守"]
 
+# --- エンジニア登録フォーム選択肢 ---
+
+JOB_TYPE_OPTIONS = ["SIer", "Web系", "モバイル", "データ/AI", "インフラ", "セキュリティ", "ゲーム", "コンサル/PMO"]
+POSITION_OPTIONS = ["PM", "PL", "SE", "PG", "テスター", "インフラエンジニア", "デザイナー"]
+REMOTE_OPTIONS = ["フルリモート希望", "一部リモート可", "オンサイトのみ"]
+AREA_OPTIONS = ["東京23区", "神奈川", "埼玉", "千葉", "大阪", "大阪近郊（京都・奈良・兵庫）", "名古屋", "愛知（名古屋除く）", "福岡"]
+
 
 # --- エリア正規化 ---
 
