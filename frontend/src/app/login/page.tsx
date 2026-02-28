@@ -17,6 +17,10 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
+      if (!supabase) {
+        router.push("/");
+        return;
+      }
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,

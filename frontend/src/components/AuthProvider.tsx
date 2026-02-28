@@ -38,11 +38,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Supabase URLが未設定の場合は認証をスキップ（ローカル開発用）
-  const authEnabled = !!process.env.NEXT_PUBLIC_SUPABASE_URL;
-
   useEffect(() => {
-    if (!authEnabled) {
+    // Supabase未設定の場合は認証をスキップ（ダミー管理者として動作）
+    if (!supabase) {
       setUser({
         id: "__auth_disabled__",
         email: "admin@localhost",
@@ -79,7 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
 
     return () => subscription.unsubscribe();
-  }, [authEnabled]);
+  }, []);
 
   async function fetchUserProfile(token: string) {
     try {
@@ -101,7 +99,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
-    await supabase.auth.signOut();
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
     setSession(null);
     setUser(null);
   }
