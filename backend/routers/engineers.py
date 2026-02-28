@@ -27,6 +27,7 @@ from models.schemas import EngineerCreate, EngineerUpdate, AssignmentCreate
 from utils.text_helpers import (
     normalize_skill_name, categorize_skills, PROCESS_OPTIONS,
     JOB_TYPE_OPTIONS, POSITION_OPTIONS, REMOTE_OPTIONS, AREA_OPTIONS,
+    EDUCATION_OPTIONS, INDUSTRY_OPTIONS, PROFICIENCY_OPTIONS,
 )
 
 router = APIRouter(prefix="/api/engineers", tags=["engineers"])
@@ -58,6 +59,9 @@ def engineer_filters():
             "position_options": POSITION_OPTIONS,
             "remote_options": REMOTE_OPTIONS,
             "area_options": AREA_OPTIONS,
+            "education_options": EDUCATION_OPTIONS,
+            "industry_options": INDUSTRY_OPTIONS,
+            "proficiency_options": PROFICIENCY_OPTIONS,
         }
     except Exception as e:
         logger.exception("engineer_filters error")
@@ -119,6 +123,11 @@ def engineer_list(
                 "career_desired_job_type": r.get("career_desired_job_type", ""),
                 "career_desired_skills": r.get("career_desired_skills", ""),
                 "career_notes": r.get("career_notes", ""),
+                "birth_date": r.get("birth_date", ""),
+                "education": r.get("education", ""),
+                "industry_experience": r.get("industry_experience", ""),
+                "skill_proficiency": r.get("skill_proficiency", "{}"),
+                "certifications": r.get("certifications", ""),
                 "categorized_skills": categorize_skills(skills),
                 "created_at": str(r.get("created_at", "")),
                 "updated_at": str(r.get("updated_at", "")),
@@ -170,6 +179,8 @@ def engineer_export(
         "希望エリア", "稼働可能日", "対応工程",
         "職種経験", "ポジション経験", "リモート希望",
         "キャリア希望職種", "習得したいスキル", "キャリアメモ",
+        "生年月日", "最終学歴", "業種経験",
+        "スキル習熟度", "資格・認定",
         "備考",
     ])
 
@@ -191,6 +202,11 @@ def engineer_export(
             r.get("career_desired_job_type", ""),
             r.get("career_desired_skills", ""),
             r.get("career_notes", ""),
+            r.get("birth_date", ""),
+            r.get("education", ""),
+            r.get("industry_experience", ""),
+            r.get("skill_proficiency", "{}"),
+            r.get("certifications", ""),
             r.get("notes", ""),
         ])
 
@@ -262,6 +278,11 @@ async def engineer_import_csv(file: UploadFile = File(...)):
             "career_desired_job_type": (row.get("キャリア希望職種") or row.get("career_desired_job_type") or "").strip(),
             "career_desired_skills": (row.get("習得したいスキル") or row.get("career_desired_skills") or "").strip(),
             "career_notes": (row.get("キャリアメモ") or row.get("career_notes") or "").strip(),
+            "birth_date": (row.get("生年月日") or row.get("birth_date") or "").strip(),
+            "education": (row.get("最終学歴") or row.get("education") or "").strip(),
+            "industry_experience": (row.get("業種経験") or row.get("industry_experience") or "").strip(),
+            "skill_proficiency": (row.get("スキル習熟度") or row.get("skill_proficiency") or "{}").strip(),
+            "certifications": (row.get("資格・認定") or row.get("certifications") or "").strip(),
             "notes": (row.get("備考") or row.get("notes") or "").strip(),
         }
 

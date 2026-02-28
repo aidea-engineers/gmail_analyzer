@@ -46,6 +46,11 @@ const EMPTY_FORM: EngineerForm = {
   career_desired_job_type: [],
   career_desired_skills: "",
   career_notes: "",
+  birth_date: "",
+  education: "",
+  industry_experience: [],
+  skill_proficiency: {},
+  certifications: "",
 };
 
 const SKILL_CATEGORY_COLORS: Record<string, string> = {
@@ -246,6 +251,11 @@ export default function EngineersPage() {
       career_desired_job_type: eng.career_desired_job_type ? eng.career_desired_job_type.split(",").map(s => s.trim()).filter(Boolean) : [],
       career_desired_skills: eng.career_desired_skills || "",
       career_notes: eng.career_notes || "",
+      birth_date: eng.birth_date || "",
+      education: eng.education || "",
+      industry_experience: eng.industry_experience ? eng.industry_experience.split(",").map(s => s.trim()).filter(Boolean) : [],
+      skill_proficiency: eng.skill_proficiency ? (() => { try { return JSON.parse(eng.skill_proficiency); } catch { return {}; } })() : {},
+      certifications: eng.certifications || "",
     });
     setFormError("");
     setShowForm(true);
@@ -292,6 +302,11 @@ export default function EngineersPage() {
       career_desired_job_type: form.career_desired_job_type.join(","),
       career_desired_skills: form.career_desired_skills,
       career_notes: form.career_notes,
+      birth_date: form.birth_date,
+      education: form.education,
+      industry_experience: form.industry_experience.join(","),
+      skill_proficiency: JSON.stringify(form.skill_proficiency),
+      certifications: form.certifications,
     };
 
     try {
@@ -675,6 +690,19 @@ export default function EngineersPage() {
                     <label className="block text-xs text-slate-500 mb-1">稼働可能日</label>
                     <input type="date" value={form.available_from} onChange={(e) => setForm({ ...form, available_from: e.target.value })} className="w-full px-2 py-1.5 border rounded text-sm" style={{ borderColor: "var(--border)" }} />
                   </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">生年月日</label>
+                    <input type="date" value={form.birth_date} onChange={(e) => setForm({ ...form, birth_date: e.target.value })} className="w-full px-2 py-1.5 border rounded text-sm" style={{ borderColor: "var(--border)" }} />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">最終学歴</label>
+                    <select value={form.education} onChange={(e) => setForm({ ...form, education: e.target.value })} className="w-full px-2 py-1.5 border rounded text-sm" style={{ borderColor: "var(--border)" }}>
+                      <option value="">未選択</option>
+                      {(filters?.education_options ?? []).map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -684,15 +712,36 @@ export default function EngineersPage() {
                 {Object.entries(SKILL_CHECKBOXES).map(([cat, skillList]) => (
                   <div key={cat} className="mb-2">
                     <p className="text-xs text-slate-500 mb-1">{cat}</p>
-                    <div className="flex flex-wrap gap-x-3 gap-y-1">
+                    <div className="flex flex-wrap gap-x-3 gap-y-1.5">
                       {skillList.map((sk) => (
-                        <label key={sk} className="flex items-center gap-1 text-xs cursor-pointer">
-                          <input type="checkbox" checked={form.skills.includes(sk)} onChange={() => {
-                            const next = form.skills.includes(sk) ? form.skills.filter(s => s !== sk) : [...form.skills, sk];
-                            setForm({ ...form, skills: next });
-                          }} />
-                          {sk}
-                        </label>
+                        <span key={sk} className="flex items-center gap-1 text-xs">
+                          <label className="flex items-center gap-1 cursor-pointer">
+                            <input type="checkbox" checked={form.skills.includes(sk)} onChange={() => {
+                              const next = form.skills.includes(sk) ? form.skills.filter(s => s !== sk) : [...form.skills, sk];
+                              const prof = { ...form.skill_proficiency };
+                              if (!next.includes(sk)) delete prof[sk];
+                              setForm({ ...form, skills: next, skill_proficiency: prof });
+                            }} />
+                            {sk}
+                          </label>
+                          {form.skills.includes(sk) && (
+                            <select
+                              value={form.skill_proficiency[sk] || ""}
+                              onChange={(e) => {
+                                const prof = { ...form.skill_proficiency };
+                                if (e.target.value) { prof[sk] = e.target.value; } else { delete prof[sk]; }
+                                setForm({ ...form, skill_proficiency: prof });
+                              }}
+                              className="px-1 py-0 border rounded text-xs text-slate-600"
+                              style={{ borderColor: "var(--border)", fontSize: "10px" }}
+                            >
+                              <option value="">-</option>
+                              {(filters?.proficiency_options ?? ["初級", "中級", "上級"]).map((lv) => (
+                                <option key={lv} value={lv}>{lv}</option>
+                              ))}
+                            </select>
+                          )}
+                        </span>
                       ))}
                     </div>
                   </div>
@@ -748,6 +797,24 @@ export default function EngineersPage() {
                         </label>
                       ))}
                     </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">業種経験</label>
+                    <div className="flex flex-wrap gap-3">
+                      {(filters?.industry_options ?? []).map((ind) => (
+                        <label key={ind} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                          <input type="checkbox" checked={form.industry_experience.includes(ind)} onChange={() => {
+                            const next = form.industry_experience.includes(ind) ? form.industry_experience.filter(v => v !== ind) : [...form.industry_experience, ind];
+                            setForm({ ...form, industry_experience: next });
+                          }} />
+                          {ind}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">資格・認定（カンマ区切り）</label>
+                    <input type="text" value={form.certifications} onChange={(e) => setForm({ ...form, certifications: e.target.value })} placeholder="AWS SAA, 基本情報技術者, LPIC-1" className="w-full px-2 py-1.5 border rounded text-sm" style={{ borderColor: "var(--border)" }} />
                   </div>
                 </div>
               </div>
@@ -983,11 +1050,14 @@ export default function EngineersPage() {
                             {SKILL_CATEGORY_ORDER.filter(cat => detail.categorized_skills?.[cat]?.length).map(cat => (
                               <div key={cat} className="flex items-center gap-1 flex-wrap">
                                 <span className="text-xs text-slate-400 w-12 shrink-0">{cat}:</span>
-                                {detail.categorized_skills[cat].map(sk => (
-                                  <span key={sk} className={`px-1.5 py-0.5 text-xs rounded ${SKILL_CATEGORY_COLORS[cat]}`}>
-                                    {sk}
-                                  </span>
-                                ))}
+                                {detail.categorized_skills[cat].map(sk => {
+                                  const prof: Record<string, string> = (() => { try { return JSON.parse(detail.skill_proficiency || "{}"); } catch { return {}; } })();
+                                  return (
+                                    <span key={sk} className={`px-1.5 py-0.5 text-xs rounded ${SKILL_CATEGORY_COLORS[cat]}`}>
+                                      {sk}{prof[sk] ? <span className="ml-0.5 opacity-70">({prof[sk]})</span> : null}
+                                    </span>
+                                  );
+                                })}
                               </div>
                             ))}
                           </div>
@@ -1019,6 +1089,30 @@ export default function EngineersPage() {
                         <p className="text-sm mb-1">
                           <span className="font-semibold">リモート:</span>{" "}
                           {detail.remote_preference}
+                        </p>
+                      )}
+                      {detail.birth_date && (
+                        <p className="text-sm mb-1">
+                          <span className="font-semibold">生年月日:</span>{" "}
+                          {detail.birth_date}
+                        </p>
+                      )}
+                      {detail.education && (
+                        <p className="text-sm mb-1">
+                          <span className="font-semibold">最終学歴:</span>{" "}
+                          {detail.education}
+                        </p>
+                      )}
+                      {detail.industry_experience && (
+                        <p className="text-sm mb-1">
+                          <span className="font-semibold">業種経験:</span>{" "}
+                          {detail.industry_experience.split(",").map(s => s.trim()).filter(Boolean).join(", ")}
+                        </p>
+                      )}
+                      {detail.certifications && (
+                        <p className="text-sm mb-1">
+                          <span className="font-semibold">資格・認定:</span>{" "}
+                          {detail.certifications}
                         </p>
                       )}
                       {/* キャリア */}

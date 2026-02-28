@@ -93,6 +93,11 @@ class EngineerCreate(BaseModel):
     career_desired_job_type: str = Field("", description="今後の希望職種（カンマ区切り）")
     career_desired_skills: str = Field("", description="習得したいスキル")
     career_notes: str = Field("", description="キャリアメモ")
+    birth_date: str = Field("", description="生年月日（YYYY-MM-DD）")
+    education: str = Field("", description="最終学歴")
+    industry_experience: str = Field("", description="業種経験（カンマ区切り）")
+    skill_proficiency: str = Field("{}", description="スキル習熟度（JSON文字列: {\"Java\":\"上級\"}）")
+    certifications: str = Field("", description="資格・認定（カンマ区切り）")
 
 
 class EngineerUpdate(BaseModel):
@@ -114,6 +119,11 @@ class EngineerUpdate(BaseModel):
     career_desired_job_type: Optional[str] = None
     career_desired_skills: Optional[str] = None
     career_notes: Optional[str] = None
+    birth_date: Optional[str] = None
+    education: Optional[str] = None
+    industry_experience: Optional[str] = None
+    skill_proficiency: Optional[str] = None
+    certifications: Optional[str] = None
 
 
 class AssignmentCreate(BaseModel):

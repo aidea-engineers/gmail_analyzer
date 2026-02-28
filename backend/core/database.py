@@ -173,6 +173,11 @@ CREATE TABLE IF NOT EXISTS engineers (
     career_desired_job_type TEXT DEFAULT '',
     career_desired_skills TEXT DEFAULT '',
     career_notes    TEXT DEFAULT '',
+    birth_date      TEXT DEFAULT '',
+    education       TEXT DEFAULT '',
+    industry_experience TEXT DEFAULT '',
+    skill_proficiency TEXT DEFAULT '{}',
+    certifications  TEXT DEFAULT '',
     created_at      TIMESTAMP DEFAULT NOW(),
     updated_at      TIMESTAMP DEFAULT NOW()
 );
@@ -223,6 +228,12 @@ CREATE INDEX IF NOT EXISTS idx_proposals_listing
     ON matching_proposals(listing_id);
 CREATE INDEX IF NOT EXISTS idx_proposals_status
     ON matching_proposals(status);
+
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    version     INTEGER PRIMARY KEY,
+    description TEXT DEFAULT '',
+    applied_at  TIMESTAMP DEFAULT NOW()
+);
 """
 
 _SQLITE_SCHEMA = """
@@ -309,6 +320,11 @@ CREATE TABLE IF NOT EXISTS engineers (
     career_desired_job_type TEXT DEFAULT '',
     career_desired_skills TEXT DEFAULT '',
     career_notes    TEXT DEFAULT '',
+    birth_date      TEXT DEFAULT '',
+    education       TEXT DEFAULT '',
+    industry_experience TEXT DEFAULT '',
+    skill_proficiency TEXT DEFAULT '{}',
+    certifications  TEXT DEFAULT '',
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -364,7 +380,65 @@ CREATE INDEX IF NOT EXISTS idx_proposals_listing
     ON matching_proposals(listing_id);
 CREATE INDEX IF NOT EXISTS idx_proposals_status
     ON matching_proposals(status);
+
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    version     INTEGER PRIMARY KEY,
+    description TEXT DEFAULT '',
+    applied_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 """
+
+
+# --- Migration definitions ---
+
+MIGRATIONS = [
+    (1, "job_listings.start_month", "ALTER TABLE job_listings ADD COLUMN start_month TEXT DEFAULT ''"),
+    (2, "job_listings.requirements", "ALTER TABLE job_listings ADD COLUMN requirements TEXT DEFAULT ''"),
+    (3, "engineers.processes", "ALTER TABLE engineers ADD COLUMN processes TEXT DEFAULT ''"),
+    (4, "engineers.job_type_experience", "ALTER TABLE engineers ADD COLUMN job_type_experience TEXT DEFAULT ''"),
+    (5, "engineers.position_experience", "ALTER TABLE engineers ADD COLUMN position_experience TEXT DEFAULT ''"),
+    (6, "engineers.remote_preference", "ALTER TABLE engineers ADD COLUMN remote_preference TEXT DEFAULT ''"),
+    (7, "engineers.career_desired_job_type", "ALTER TABLE engineers ADD COLUMN career_desired_job_type TEXT DEFAULT ''"),
+    (8, "engineers.career_desired_skills", "ALTER TABLE engineers ADD COLUMN career_desired_skills TEXT DEFAULT ''"),
+    (9, "engineers.career_notes", "ALTER TABLE engineers ADD COLUMN career_notes TEXT DEFAULT ''"),
+    (10, "engineers.birth_date", "ALTER TABLE engineers ADD COLUMN birth_date TEXT DEFAULT ''"),
+    (11, "engineers.education", "ALTER TABLE engineers ADD COLUMN education TEXT DEFAULT ''"),
+    (12, "engineers.industry_experience", "ALTER TABLE engineers ADD COLUMN industry_experience TEXT DEFAULT ''"),
+    (13, "engineers.skill_proficiency", "ALTER TABLE engineers ADD COLUMN skill_proficiency TEXT DEFAULT '{}'"),
+    (14, "engineers.certifications", "ALTER TABLE engineers ADD COLUMN certifications TEXT DEFAULT ''"),
+]
+
+
+def _run_migrations(conn):
+    """バージョン管理方式のマイグレーション実行。適用済みはスキップ。"""
+    cursor = conn.execute("SELECT COALESCE(MAX(version), 0) FROM schema_migrations")
+    row = cursor.fetchone()
+    # sqlite3.Row / tuple / dict いずれでもインデックス0でアクセス可能
+    current_version = row[0]
+
+    pending = [(v, desc, sql) for v, desc, sql in MIGRATIONS if v > current_version]
+    if not pending:
+        logger.info("Schema up to date (version %d)", current_version)
+        return
+
+    for version, description, sql in pending:
+        try:
+            conn.execute(sql)
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            err_msg = str(e).lower()
+            if "already exists" in err_msg or "duplicate column" in err_msg:
+                pass  # 既存カラム — 成功扱い
+            else:
+                logger.error("Migration v%d failed: %s — %s", version, description, e)
+                raise
+        conn.execute(
+            "INSERT INTO schema_migrations (version, description) VALUES (?, ?)",
+            (version, description),
+        )
+        conn.commit()
+        logger.info("Applied migration v%d: %s", version, description)
 
 
 def _safe_add_column(conn, table: str, column: str, col_type: str = "TEXT DEFAULT ''"):
@@ -386,17 +460,8 @@ def _safe_add_column(conn, table: str, column: str, col_type: str = "TEXT DEFAUL
 def init_db():
     with get_connection() as conn:
         conn.executescript(_PG_SCHEMA if conn.is_pg else _SQLITE_SCHEMA)
-        conn.commit()  # テーブル作成を確定（後続のALTER失敗でrollbackされないように）
-        # マイグレーション: job_listings
-        _safe_add_column(conn, "job_listings", "start_month")
-        _safe_add_column(conn, "job_listings", "requirements")
-        # マイグレーション: engineers
-        for col in [
-            "processes",
-            "job_type_experience", "position_experience", "remote_preference",
-            "career_desired_job_type", "career_desired_skills", "career_notes",
-        ]:
-            _safe_add_column(conn, "engineers", col)
+        conn.commit()
+        _run_migrations(conn)
 
 
 # --- Email CRUD ---
@@ -987,8 +1052,10 @@ def insert_engineer(data: dict) -> int:
                   desired_price_min, desired_price_max,
                   status, preferred_areas, available_from, notes, processes,
                   job_type_experience, position_experience, remote_preference,
-                  career_desired_job_type, career_desired_skills, career_notes)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                  career_desired_job_type, career_desired_skills, career_notes,
+                  birth_date, education, industry_experience,
+                  skill_proficiency, certifications)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
         params = (
             data["name"],
             data.get("experience_years"),
@@ -1006,6 +1073,11 @@ def insert_engineer(data: dict) -> int:
             data.get("career_desired_job_type", ""),
             data.get("career_desired_skills", ""),
             data.get("career_notes", ""),
+            data.get("birth_date", ""),
+            data.get("education", ""),
+            data.get("industry_experience", ""),
+            data.get("skill_proficiency", "{}"),
+            data.get("certifications", ""),
         )
         if conn.is_pg:
             cursor = conn.execute(sql + " RETURNING id", params)
@@ -1042,6 +1114,11 @@ def update_engineer(eng_id: int, data: dict) -> bool:
             "career_desired_job_type": "career_desired_job_type",
             "career_desired_skills": "career_desired_skills",
             "career_notes": "career_notes",
+            "birth_date": "birth_date",
+            "education": "education",
+            "industry_experience": "industry_experience",
+            "skill_proficiency": "skill_proficiency",
+            "certifications": "certifications",
         }
         for key, col in field_map.items():
             if key in data:
