@@ -53,6 +53,13 @@ def _safe_float(val: str | None) -> Optional[float]:
         return None
 
 
+def _strip_yen(val: str | None) -> str | None:
+    """「850000円」→「850000」のように円記号を除去する"""
+    if not val:
+        return val
+    return val.strip().replace("円", "")
+
+
 @router.post("/employees")
 async def import_employees(
     file: UploadFile = File(...),
@@ -66,9 +73,8 @@ async def import_employees(
     # 1行目がメタデータかどうか判定（ヘッダー行を探す）
     start_line = 0
     if len(lines) > 1:
-        # 「氏名」や「名前」がある行をヘッダーとみなす
         for i, line in enumerate(lines[:3]):
-            if "氏名" in line or "名前" in line or "name" in line.lower():
+            if "名前" in line or "氏名" in line or "name" in line.lower():
                 start_line = i
                 break
 
@@ -80,7 +86,7 @@ async def import_employees(
 
     for i, row in enumerate(reader, start=start_line + 2):
         name = (
-            row.get("氏名") or row.get("名前") or row.get("name") or ""
+            row.get("名前(漢字)") or row.get("氏名") or row.get("名前") or ""
         ).strip()
         if not name:
             continue
@@ -95,16 +101,16 @@ async def import_employees(
 
         data = {
             "name": name,
-            "name_kana": (row.get("氏名（カナ）") or row.get("フリガナ") or "").strip(),
+            "name_kana": (row.get("名前(カナ)") or row.get("氏名（カナ）") or row.get("フリガナ") or "").strip(),
             "email": (row.get("メールアドレス") or row.get("email") or "").strip(),
             "phone": (row.get("電話番号") or row.get("phone") or "").strip(),
             "gender": (row.get("性別") or row.get("gender") or "").strip(),
             "birth_date": (row.get("生年月日") or row.get("birth_date") or "").strip(),
             "hire_date": (row.get("入社日") or row.get("hire_date") or "").strip(),
-            "office_branch": (row.get("所属拠点") or row.get("office_branch") or "").strip(),
-            "department": (row.get("部署") or row.get("department") or "").strip(),
-            "address": (row.get("住所") or row.get("address") or "").strip(),
-            "nearest_station": (row.get("最寄り駅") or row.get("nearest_station") or "").strip(),
+            "office_branch": (row.get("支社・事業所") or row.get("所属拠点") or "").strip(),
+            "department": (row.get("所属・部門") or row.get("部署") or "").strip(),
+            "address": (row.get("現住所") or row.get("住所") or "").strip(),
+            "nearest_station": (row.get("最寄駅名") or row.get("最寄り駅") or "").strip(),
             "fairgrit_user_id": (row.get("ユーザーID") or row.get("fairgrit_user_id") or "").strip(),
         }
 
