@@ -1,6 +1,7 @@
 """JWT認証モジュール — Supabase Auth JWTを検証し、user_profilesからロールを取得する。
 
 AUTH_ENABLED=false の場合はすべてのリクエストを許可する（デプロイ移行用）。
+Supabase は ES256 (ECC P-256) で JWT を署名するため、JWKS エンドポイントから公開鍵を取得して検証する。
 """
 from __future__ import annotations
 
@@ -10,6 +11,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 import jwt
+from jwt import PyJWKClient
 from fastapi import Depends, HTTPException, Request
 
 from core.database import get_user_profile, get_user_profile_by_email, upsert_user_profile
@@ -18,6 +20,12 @@ logger = logging.getLogger(__name__)
 
 AUTH_ENABLED = os.getenv("AUTH_ENABLED", "false").lower() in ("true", "1", "yes")
 SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+
+# JWKS クライアント（ES256 公開鍵を自動取得・キャッシュ）
+_jwks_client: Optional[PyJWKClient] = None
+if SUPABASE_URL:
+    _jwks_client = PyJWKClient(f"{SUPABASE_URL}/auth/v1/.well-known/jwks.json")
 
 
 @dataclass
@@ -58,12 +66,23 @@ async def get_current_user(request: Request) -> CurrentUser:
     token = auth_header[7:]
 
     try:
-        payload = jwt.decode(
-            token,
-            SUPABASE_JWT_SECRET,
-            algorithms=["HS256"],
-            audience="authenticated",
-        )
+        if _jwks_client:
+            # ES256: JWKS エンドポイントから公開鍵を取得して検証
+            signing_key = _jwks_client.get_signing_key_from_jwt(token)
+            payload = jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=["ES256"],
+                audience="authenticated",
+            )
+        else:
+            # フォールバック: HS256 (レガシー JWT シークレット)
+            payload = jwt.decode(
+                token,
+                SUPABASE_JWT_SECRET,
+                algorithms=["HS256"],
+                audience="authenticated",
+            )
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="トークンの有効期限が切れています")
     except jwt.InvalidTokenError as e:
