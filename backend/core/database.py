@@ -872,6 +872,54 @@ def get_total_stats(date_from: str = "", date_to: str = "") -> dict:
     }
 
 
+def get_monthly_summary(months: int = 6) -> list[dict]:
+    """月別の案件サマリーを返す（直近N月分）"""
+    with get_connection() as conn:
+        if conn.is_pg:
+            month_expr = "to_char(created_at, 'YYYY-MM')"
+        else:
+            month_expr = "strftime('%Y-%m', created_at)"
+
+        query = f"""
+            SELECT
+                {month_expr} as month,
+                COUNT(*) as listing_count,
+                AVG(
+                    CASE WHEN unit_price_min IS NOT NULL AND unit_price_max IS NOT NULL
+                         THEN (unit_price_min + unit_price_max) / 2.0
+                         WHEN unit_price_min IS NOT NULL THEN unit_price_min
+                         WHEN unit_price_max IS NOT NULL THEN unit_price_max
+                         ELSE NULL END
+                ) as avg_price,
+                COUNT(DISTINCT CASE WHEN company_name != '' THEN company_name ELSE NULL END) as unique_companies
+            FROM job_listings
+            WHERE created_at IS NOT NULL
+            GROUP BY {month_expr}
+            ORDER BY month DESC
+            LIMIT ?
+        """
+        rows = [dict(r) for r in conn.execute(query, (months,)).fetchall()]
+
+        # 各月の最多エリアを取得
+        for row in rows:
+            area_query = f"""
+                SELECT work_area, COUNT(*) as cnt
+                FROM job_listings
+                WHERE {month_expr} = ? AND work_area != ''
+                GROUP BY work_area
+                ORDER BY cnt DESC
+                LIMIT 1
+            """
+            area_row = conn.execute(area_query, (row["month"],)).fetchone()
+            row["top_area"] = dict(area_row)["work_area"] if area_row else ""
+            if row["avg_price"] is not None:
+                row["avg_price"] = round(float(row["avg_price"]), 1)
+
+        # 古い順に並べ替え
+        rows.reverse()
+        return rows
+
+
 def get_distinct_skills() -> list[str]:
     with get_connection() as conn:
         rows = conn.execute(

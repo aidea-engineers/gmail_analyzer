@@ -26,6 +26,12 @@ export function getCharts(period: string, granularity = "daily") {
   );
 }
 
+export function getMonthlySummary(months = 6) {
+  return fetchAPI<import("@/types").MonthlySummary[]>(
+    `/api/dashboard/monthly-summary?months=${months}`
+  );
+}
+
 /* Search */
 export function getFilters() {
   return fetchAPI<import("@/types").SearchFilters>("/api/search/filters");

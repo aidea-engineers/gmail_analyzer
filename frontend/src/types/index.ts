@@ -35,6 +35,14 @@ export interface ChartsResponse {
   trend: TrendData[];
 }
 
+export interface MonthlySummary {
+  month: string;
+  listing_count: number;
+  avg_price: number | null;
+  unique_companies: number;
+  top_area: string;
+}
+
 export interface JobListing {
   id: number;
   company_name: string;

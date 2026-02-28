@@ -9,6 +9,7 @@ from core.database import (
     get_price_distribution,
     get_area_counts,
     get_trend_data,
+    get_monthly_summary,
 )
 from utils.date_helpers import get_date_range
 
@@ -44,3 +45,10 @@ def dashboard_charts(
         "areas": areas,
         "trend": trend,
     }
+
+
+@router.get("/monthly-summary")
+def dashboard_monthly_summary(
+    months: int = Query(6, description="取得する月数", ge=1, le=24),
+):
+    return get_monthly_summary(months=months)

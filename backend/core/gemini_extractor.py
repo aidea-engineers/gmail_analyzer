@@ -21,6 +21,7 @@ from utils.text_helpers import (
     _extract_domain_company,
     _company_name_quality,
     _normalize_corp_abbreviation,
+    apply_company_name_override,
 )
 
 logger = logging.getLogger(__name__)
@@ -170,6 +171,8 @@ def extract_from_email(
                     if best[2]:
                         # （株）→ 株式会社 等の略称を正規化
                         listing.company_name = _normalize_corp_abbreviation(best[2])
+                # 手動マッピングで上書き（略称→正式名称）
+                listing.company_name = apply_company_name_override(listing.company_name)
 
             return result.listings
 

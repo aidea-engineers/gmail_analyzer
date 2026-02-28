@@ -743,6 +743,22 @@ def extract_company_from_signature(body_text: str) -> str:
     return ""
 
 
+# --- 会社名の手動マッピング（略称→正式名称）---
+# 全ソースが同じ略称しか持っていないケースに対応。
+# 必要に応じて手動で追加する。キーは小文字に正規化して比較。
+COMPANY_NAME_OVERRIDES: dict[str, str] = {
+    # 例: "bn": "株式会社BN",
+    # 例: "itether": "株式会社itether",
+}
+
+
+def apply_company_name_override(name: str) -> str:
+    """会社名が手動マッピングに存在する場合、正式名称に置換する"""
+    if not name:
+        return name
+    return COMPANY_NAME_OVERRIDES.get(name.strip().lower(), name)
+
+
 def extract_company_from_sender(sender: str) -> str:
     """メール送信者のFromヘッダーから会社名のみを抽出する（担当者名・部署名は除外）
 

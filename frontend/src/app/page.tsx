@@ -7,8 +7,8 @@ import SkillBarChart from "@/components/charts/SkillBarChart";
 import PriceHistogram from "@/components/charts/PriceHistogram";
 import AreaPieChart from "@/components/charts/AreaPieChart";
 import TrendLineChart from "@/components/charts/TrendLineChart";
-import { getKPIs, getCharts } from "@/lib/api";
-import type { KPIs, ChartsResponse } from "@/types";
+import { getKPIs, getCharts, getMonthlySummary } from "@/lib/api";
+import type { KPIs, ChartsResponse, MonthlySummary } from "@/types";
 
 const PERIODS = ["7日", "30日", "90日", "全期間"] as const;
 type Period = (typeof PERIODS)[number];
@@ -18,6 +18,7 @@ export default function DashboardPage() {
   const [granularity, setGranularity] = useState<"daily" | "weekly">("daily");
   const [kpis, setKpis] = useState<KPIs | null>(null);
   const [charts, setCharts] = useState<ChartsResponse | null>(null);
+  const [monthly, setMonthly] = useState<MonthlySummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -26,11 +27,12 @@ export default function DashboardPage() {
     setLoading(true);
     setError("");
 
-    Promise.all([getKPIs(period), getCharts(period, granularity)])
-      .then(([k, c]) => {
+    Promise.all([getKPIs(period), getCharts(period, granularity), getMonthlySummary()])
+      .then(([k, c, m]) => {
         if (!cancelled) {
           setKpis(k);
           setCharts(c);
+          setMonthly(m);
         }
       })
       .catch((e) => {
@@ -129,6 +131,40 @@ export default function DashboardPage() {
               </button>
             </div>
             <TrendLineChart data={charts?.trend ?? []} />
+          </CollapsibleSection>
+
+          {/* 月別サマリー */}
+          <CollapsibleSection title="月別サマリー" defaultOpen={true}>
+            {monthly.length === 0 ? (
+              <p className="text-sm text-slate-400">データなし</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                      <th className="text-left py-2 px-3 font-medium">月</th>
+                      <th className="text-right py-2 px-3 font-medium">案件数</th>
+                      <th className="text-right py-2 px-3 font-medium">平均単価</th>
+                      <th className="text-right py-2 px-3 font-medium">会社数</th>
+                      <th className="text-left py-2 px-3 font-medium">最多エリア</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {monthly.map((row) => (
+                      <tr key={row.month} style={{ borderBottom: "1px solid var(--border)" }}>
+                        <td className="py-2 px-3">{row.month}</td>
+                        <td className="py-2 px-3 text-right">{row.listing_count}件</td>
+                        <td className="py-2 px-3 text-right">
+                          {row.avg_price != null ? `${row.avg_price}万円` : "-"}
+                        </td>
+                        <td className="py-2 px-3 text-right">{row.unique_companies}</td>
+                        <td className="py-2 px-3">{row.top_area || "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </CollapsibleSection>
         </div>
       )}
