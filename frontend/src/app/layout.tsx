@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import Sidebar from "@/components/Sidebar";
+import { AuthProvider } from "@/components/AuthProvider";
+import AppShell from "@/components/AppShell";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Gmail Analyzer - SES案件ダッシュボード",
-  description: "SES案件メールを自動解析し、案件情報を可視化するダッシュボード",
+  title: "AIdea Platform - SES事業管理",
+  description: "SES事業管理システム - 案件解析・エンジニア管理・マッチング",
 };
 
 export default function RootLayout({
@@ -28,10 +29,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <Sidebar />
-        <main className="lg:ml-56 min-h-screen p-4 pt-14 lg:p-6">
-          {children}
-        </main>
+        <AuthProvider>
+          <AppShell>{children}</AppShell>
+        </AuthProvider>
       </body>
     </html>
   );

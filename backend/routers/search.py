@@ -6,7 +6,7 @@ import io
 import json
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 
 from core.database import (
@@ -16,13 +16,14 @@ from core.database import (
     get_distinct_job_types,
     get_distinct_companies,
 )
+from core.auth import CurrentUser, require_admin
 from utils.date_helpers import format_date_jp
 
 router = APIRouter(prefix="/api/search", tags=["search"])
 
 
 @router.get("/filters")
-def search_filters():
+def search_filters(user: CurrentUser = Depends(require_admin)):
     return {
         "skills": get_distinct_skills(),
         "areas": get_distinct_areas(),
@@ -43,6 +44,7 @@ def search_listings_api(
     price_max: Optional[int] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    user: CurrentUser = Depends(require_admin),
 ):
     skills_list = [s.strip() for s in skills.split(",") if s.strip()] if skills else None
     areas_list = [a.strip() for a in areas.split(",") if a.strip()] if areas else None
@@ -107,6 +109,7 @@ def export_csv(
     price_max: Optional[int] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    user: CurrentUser = Depends(require_admin),
 ):
     skills_list = [s.strip() for s in skills.split(",") if s.strip()] if skills else None
     areas_list = [a.strip() for a in areas.split(",") if a.strip()] if areas else None

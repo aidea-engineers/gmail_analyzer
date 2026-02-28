@@ -5,7 +5,9 @@ import json
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException
+
+from core.auth import CurrentUser, require_admin
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +48,7 @@ def _serialize_listing(listing: dict) -> dict:
 
 
 @router.get("/stats")
-def matching_stats():
+def matching_stats(user: CurrentUser = Depends(require_admin)):
     """マッチングKPI統計"""
     try:
         return get_matching_stats()
@@ -56,7 +58,7 @@ def matching_stats():
 
 
 @router.get("/engineers-for-listing/{listing_id}")
-def engineers_for_listing(listing_id: int, limit: int = Query(20, ge=1, le=100)):
+def engineers_for_listing(listing_id: int, limit: int = Query(20, ge=1, le=100), user: CurrentUser = Depends(require_admin)):
     """案件に合うエンジニア一覧（スコア付き）"""
     try:
         matches = match_engineers_for_listing(listing_id, limit=limit)
@@ -74,7 +76,7 @@ def engineers_for_listing(listing_id: int, limit: int = Query(20, ge=1, le=100))
 
 
 @router.get("/listings-for-engineer/{engineer_id}")
-def listings_for_engineer(engineer_id: int, limit: int = Query(20, ge=1, le=100)):
+def listings_for_engineer(engineer_id: int, limit: int = Query(20, ge=1, le=100), user: CurrentUser = Depends(require_admin)):
     """エンジニアに合う案件一覧（スコア付き）"""
     try:
         matches = match_listings_for_engineer(engineer_id, limit=limit)
@@ -92,7 +94,7 @@ def listings_for_engineer(engineer_id: int, limit: int = Query(20, ge=1, le=100)
 
 
 @router.post("/proposals")
-def create_proposal(body: ProposalCreate):
+def create_proposal(body: ProposalCreate, user: CurrentUser = Depends(require_admin)):
     """提案登録"""
     try:
         pid = insert_proposal(
@@ -110,7 +112,7 @@ def create_proposal(body: ProposalCreate):
 
 
 @router.put("/proposals/{proposal_id}")
-def update_proposal(proposal_id: int, body: ProposalUpdate):
+def update_proposal(proposal_id: int, body: ProposalUpdate, user: CurrentUser = Depends(require_admin)):
     """提案ステータス更新"""
     valid = {"候補", "提案済み", "面談中", "成約", "見送り"}
     if body.status not in valid:
@@ -124,7 +126,7 @@ def update_proposal(proposal_id: int, body: ProposalUpdate):
 
 
 @router.delete("/proposals/{proposal_id}")
-def remove_proposal(proposal_id: int):
+def remove_proposal(proposal_id: int, user: CurrentUser = Depends(require_admin)):
     """提案削除"""
     ok = delete_proposal(proposal_id)
     if not ok:
@@ -137,6 +139,7 @@ def list_proposals(
     status: Optional[str] = None,
     engineer_id: Optional[int] = None,
     listing_id: Optional[int] = None,
+    user: CurrentUser = Depends(require_admin),
 ):
     """提案一覧（フィルター付き）"""
     try:
@@ -154,7 +157,7 @@ def list_proposals(
 
 
 @router.get("/engineers-brief")
-def engineers_brief():
+def engineers_brief(user: CurrentUser = Depends(require_admin)):
     """エンジニア簡易一覧（待機中/面談中のみ、ドロップダウン用）"""
     try:
         results = search_engineers(statuses=["待機中", "面談中"])

@@ -1,8 +1,9 @@
 """ダッシュボード関連 API"""
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
+from core.auth import CurrentUser, require_admin
 from core.database import (
     get_total_stats,
     get_skill_counts,
@@ -19,6 +20,7 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 @router.get("/kpis")
 def dashboard_kpis(
     period: str = Query("30日", description="表示期間: 7日, 30日, 90日, 全期間"),
+    user: CurrentUser = Depends(require_admin),
 ):
     date_from, date_to = get_date_range(period)
     stats = get_total_stats(date_from=date_from, date_to=date_to)
@@ -29,6 +31,7 @@ def dashboard_kpis(
 def dashboard_charts(
     period: str = Query("30日"),
     granularity: str = Query("daily", description="トレンド粒度: daily, weekly"),
+    user: CurrentUser = Depends(require_admin),
 ):
     date_from, date_to = get_date_range(period)
 
@@ -50,5 +53,6 @@ def dashboard_charts(
 @router.get("/monthly-summary")
 def dashboard_monthly_summary(
     months: int = Query(6, description="取得する月数", ge=1, le=24),
+    user: CurrentUser = Depends(require_admin),
 ):
     return get_monthly_summary(months=months)

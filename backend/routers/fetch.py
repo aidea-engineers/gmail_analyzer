@@ -9,9 +9,10 @@ from typing import Optional
 
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
+from core.auth import CurrentUser, require_admin
 from core.database import (
     get_connection,
     get_fetch_logs,
@@ -45,7 +46,7 @@ _running_job_id: Optional[str] = None
 
 
 @router.get("/status")
-def fetch_status():
+def fetch_status(user: CurrentUser = Depends(require_admin)):
     gmail_connected = is_authenticated()
     with get_connection() as conn:
         total_emails = conn.execute(
@@ -70,7 +71,7 @@ def fetch_status():
 
 
 @router.get("/logs")
-def fetch_logs(limit: int = Query(10, ge=1, le=100)):
+def fetch_logs(limit: int = Query(10, ge=1, le=100), user: CurrentUser = Depends(require_admin)):
     logs = get_fetch_logs(limit=limit)
     return {"logs": logs}
 
@@ -135,7 +136,7 @@ def _run_pipeline(job_id: str, mode: str):
 
 
 @router.post("/full-pipeline")
-def start_full_pipeline(background_tasks: BackgroundTasks):
+def start_full_pipeline(background_tasks: BackgroundTasks, user: CurrentUser = Depends(require_admin)):
     global _running_job_id
     with _pipeline_lock:
         if _running_job_id is not None:
@@ -157,7 +158,7 @@ def start_full_pipeline(background_tasks: BackgroundTasks):
 
 
 @router.post("/ai-only")
-def start_ai_only(background_tasks: BackgroundTasks):
+def start_ai_only(background_tasks: BackgroundTasks, user: CurrentUser = Depends(require_admin)):
     global _running_job_id
     with _pipeline_lock:
         if _running_job_id is not None:
@@ -292,19 +293,19 @@ async def stream_progress(job_id: str):
 
 
 @router.post("/mock")
-def insert_mock_data(count: int = Query(150, ge=10, le=500)):
+def insert_mock_data(count: int = Query(150, ge=10, le=500), user: CurrentUser = Depends(require_admin)):
     inserted = generate_and_insert(count=count)
     return {"inserted": inserted}
 
 
 @router.delete("/mock")
-def delete_mock_data():
+def delete_mock_data(user: CurrentUser = Depends(require_admin)):
     deleted = clear_mock_data()
     return {"deleted": deleted, "message": f"モックデータ{deleted}件を削除しました"}
 
 
 @router.delete("/data")
-def delete_all_data():
+def delete_all_data(user: CurrentUser = Depends(require_admin)):
     clear_all_data()
     return {"message": "全データを削除しました"}
 

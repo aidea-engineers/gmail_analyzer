@@ -1,7 +1,32 @@
+import { supabase } from "@/lib/supabase";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {};
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      headers["Authorization"] = `Bearer ${session.access_token}`;
+    }
+  } catch {
+    // Supabase未設定時（ローカル開発）は何も付与しない
+  }
+  return headers;
+}
+
 async function fetchAPI<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, { cache: "no-store", ...init });
+  const authHeaders = await getAuthHeaders();
+  const mergedHeaders = {
+    ...authHeaders,
+    ...(init?.headers || {}),
+  };
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    cache: "no-store",
+    ...init,
+    headers: mergedHeaders,
+  });
   if (!res.ok) {
     let detail = res.statusText;
     try {
@@ -149,11 +174,13 @@ export function getEngineerExportURL(params: Record<string, string>) {
 }
 
 export async function importEngineersCsv(file: File) {
+  const authHeaders = await getAuthHeaders();
   const formData = new FormData();
   formData.append("file", file);
   const res = await fetch(`${API_BASE}/api/engineers/import-csv`, {
     method: "POST",
     body: formData,
+    headers: authHeaders,
   });
   if (!res.ok) {
     let detail = res.statusText;
@@ -246,4 +273,25 @@ export function getEngineersBrief() {
   return fetchAPI<import("@/types").EngineerBrief[]>(
     "/api/matching/engineers-brief"
   );
+}
+
+/* Import (Phase 2) */
+export async function importDataCsv(type: "employees" | "assignments" | "companies", file: File) {
+  const authHeaders = await getAuthHeaders();
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${API_BASE}/api/import/${type}`, {
+    method: "POST",
+    body: formData,
+    headers: authHeaders,
+  });
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const body = await res.json();
+      if (body.detail) detail = body.detail;
+    } catch {}
+    throw new Error(detail);
+  }
+  return res.json() as Promise<import("@/types").CsvImportResult>;
 }

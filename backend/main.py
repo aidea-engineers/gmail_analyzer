@@ -1,4 +1,4 @@
-"""FastAPI エントリポイント - Gmail Analyzer バックエンド"""
+"""FastAPI エントリポイント - AIdea Platform バックエンド"""
 from __future__ import annotations
 
 import logging
@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import Config
 from core.database import init_db, cleanup_stale_fetch_logs, clear_old_email_bodies
-from routers import dashboard, search, fetch, settings, engineers, matching
+from routers import auth, dashboard, search, fetch, settings, engineers, matching, import_data
 
 # ロギング設定（Renderログに出力するためstdoutに設定）
 logging.basicConfig(
@@ -19,9 +19,9 @@ logging.basicConfig(
 )
 
 app = FastAPI(
-    title="Gmail Analyzer API",
-    description="SES案件メール解析 API",
-    version="0.1.0",
+    title="AIdea Platform API",
+    description="SES事業管理システム API",
+    version="1.0.0",
 )
 
 # CORS設定（環境変数で動的に設定）
@@ -34,12 +34,14 @@ app.add_middleware(
 )
 
 # ルーター登録
+app.include_router(auth.router)
 app.include_router(dashboard.router)
 app.include_router(search.router)
 app.include_router(fetch.router)
 app.include_router(settings.router)
 app.include_router(engineers.router)
 app.include_router(matching.router)
+app.include_router(import_data.router)
 
 
 logger = logging.getLogger(__name__)

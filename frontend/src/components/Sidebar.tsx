@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { useAuth } from "@/components/AuthProvider";
 
-const NAV_ITEMS = [
+const ADMIN_NAV_ITEMS = [
   { href: "/", label: "ダッシュボード", icon: "📊" },
   { href: "/search", label: "案件検索", icon: "🔍" },
   { href: "/engineers", label: "エンジニア管理", icon: "👤" },
@@ -13,9 +14,16 @@ const NAV_ITEMS = [
   { href: "/settings", label: "設定", icon: "⚙️" },
 ];
 
+const ENGINEER_NAV_ITEMS = [
+  { href: "/my-profile", label: "マイプロフィール", icon: "👤" },
+];
+
 export default function Sidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const { user, signOut } = useAuth();
+
+  const navItems = user?.is_admin ? ADMIN_NAV_ITEMS : ENGINEER_NAV_ITEMS;
 
   return (
     <>
@@ -50,11 +58,11 @@ export default function Sidebar() {
         style={{ background: "var(--sidebar-bg)", color: "var(--sidebar-text)" }}
       >
         <div className="p-4 border-b border-slate-600">
-          <h1 className="text-lg font-bold">Gmail Analyzer</h1>
-          <p className="text-xs text-slate-400 mt-1">SES案件メール解析</p>
+          <h1 className="text-lg font-bold">AIdea Platform</h1>
+          <p className="text-xs text-slate-400 mt-1">SES事業管理システム</p>
         </div>
         <nav className="flex-1 p-2 space-y-1">
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const active = pathname === item.href;
             return (
               <Link
@@ -73,8 +81,22 @@ export default function Sidebar() {
             );
           })}
         </nav>
-        <div className="p-4 border-t border-slate-600 text-xs text-slate-500">
-          v0.2.0
+        <div className="p-4 border-t border-slate-600">
+          {user && (
+            <div className="mb-3">
+              <p className="text-xs text-slate-400 truncate">{user.email}</p>
+              <p className="text-xs text-slate-500">
+                {user.is_admin ? "管理者" : "エンジニア"}
+              </p>
+            </div>
+          )}
+          <button
+            onClick={signOut}
+            className="w-full text-left text-xs text-slate-400 hover:text-white transition-colors"
+          >
+            ログアウト
+          </button>
+          <p className="text-xs text-slate-600 mt-2">v1.0.0</p>
         </div>
       </aside>
     </>

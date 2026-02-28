@@ -6,8 +6,10 @@ import io
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Query, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, Query, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
+
+from core.auth import CurrentUser, require_auth, require_admin
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +39,7 @@ router = APIRouter(prefix="/api/engineers", tags=["engineers"])
 
 
 @router.get("/stats")
-def engineer_stats():
+def engineer_stats(user: CurrentUser = Depends(require_admin)):
     """エンジニアのKPI統計"""
     try:
         return get_engineer_stats()
@@ -47,7 +49,7 @@ def engineer_stats():
 
 
 @router.get("/filters")
-def engineer_filters():
+def engineer_filters(user: CurrentUser = Depends(require_admin)):
     """フィルター選択肢を返す"""
     try:
         return {
@@ -79,6 +81,7 @@ def engineer_list(
     job_types: Optional[str] = Query(None, description="カンマ区切り職種経験"),
     positions: Optional[str] = Query(None, description="カンマ区切りポジション"),
     remote: Optional[str] = Query(None, description="カンマ区切りリモート希望"),
+    user: CurrentUser = Depends(require_admin),
 ):
     """エンジニア一覧（フィルター付き）"""
     try:
@@ -150,6 +153,7 @@ def engineer_export(
     job_types: Optional[str] = Query(None, description="カンマ区切り職種経験"),
     positions: Optional[str] = Query(None, description="カンマ区切りポジション"),
     remote: Optional[str] = Query(None, description="カンマ区切りリモート希望"),
+    user: CurrentUser = Depends(require_admin),
 ):
     """エンジニア一覧をCSVエクスポート（BOM付きUTF-8）"""
     skills_list = [s.strip() for s in skills.split(",") if s.strip()] if skills else None
@@ -219,7 +223,7 @@ def engineer_export(
 
 
 @router.post("/import-csv")
-async def engineer_import_csv(file: UploadFile = File(...)):
+async def engineer_import_csv(file: UploadFile = File(...), user: CurrentUser = Depends(require_admin)):
     """CSVファイルからエンジニアを一括インポート（UTF-8/Shift_JIS両対応）"""
     content = await file.read()
 
@@ -299,7 +303,7 @@ async def engineer_import_csv(file: UploadFile = File(...)):
 
 
 @router.post("")
-def create_engineer(body: EngineerCreate):
+def create_engineer(body: EngineerCreate, user: CurrentUser = Depends(require_admin)):
     """エンジニア新規登録"""
     try:
         data = body.model_dump()
@@ -313,8 +317,10 @@ def create_engineer(body: EngineerCreate):
 
 
 @router.get("/{eng_id}")
-def get_engineer_detail(eng_id: int):
-    """エンジニア詳細（スキル+アサイン履歴付き）"""
+def get_engineer_detail(eng_id: int, user: CurrentUser = Depends(require_auth)):
+    """エンジニア詳細（スキル+アサイン履歴付き）。エンジニアは自分の情報のみ閲覧可。"""
+    if not user.is_admin and user.engineer_id != eng_id:
+        raise HTTPException(status_code=403, detail="自分の情報のみ閲覧できます")
     eng = get_engineer(eng_id)
     if not eng:
         raise HTTPException(status_code=404, detail="エンジニアが見つかりません")
@@ -330,8 +336,10 @@ def get_engineer_detail(eng_id: int):
 
 
 @router.put("/{eng_id}")
-def update_engineer_api(eng_id: int, body: EngineerUpdate):
-    """エンジニア更新"""
+def update_engineer_api(eng_id: int, body: EngineerUpdate, user: CurrentUser = Depends(require_auth)):
+    """エンジニア更新。エンジニアは自分の情報のみ更新可。"""
+    if not user.is_admin and user.engineer_id != eng_id:
+        raise HTTPException(status_code=403, detail="自分の情報のみ更新できます")
     data = {k: v for k, v in body.model_dump().items() if v is not None}
     if not data:
         raise HTTPException(status_code=400, detail="更新するフィールドがありません")
@@ -345,7 +353,7 @@ def update_engineer_api(eng_id: int, body: EngineerUpdate):
 
 
 @router.delete("/{eng_id}")
-def delete_engineer_api(eng_id: int):
+def delete_engineer_api(eng_id: int, user: CurrentUser = Depends(require_admin)):
     """エンジニア削除"""
     ok = delete_engineer(eng_id)
     if not ok:
@@ -354,7 +362,7 @@ def delete_engineer_api(eng_id: int):
 
 
 @router.post("/{eng_id}/assignments")
-def create_assignment(eng_id: int, body: AssignmentCreate):
+def create_assignment(eng_id: int, body: AssignmentCreate, user: CurrentUser = Depends(require_admin)):
     """アサイン履歴追加"""
     # エンジニアの存在確認
     eng = get_engineer(eng_id)
@@ -366,7 +374,7 @@ def create_assignment(eng_id: int, body: AssignmentCreate):
 
 
 @router.delete("/assignments/{assignment_id}")
-def delete_assignment_api(assignment_id: int):
+def delete_assignment_api(assignment_id: int, user: CurrentUser = Depends(require_admin)):
     """アサイン履歴削除"""
     ok = delete_assignment(assignment_id)
     if not ok:

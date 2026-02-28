@@ -178,6 +178,16 @@ CREATE TABLE IF NOT EXISTS engineers (
     industry_experience TEXT DEFAULT '',
     skill_proficiency TEXT DEFAULT '{}',
     certifications  TEXT DEFAULT '',
+    email           TEXT DEFAULT '',
+    phone           TEXT DEFAULT '',
+    name_kana       TEXT DEFAULT '',
+    gender          TEXT DEFAULT '',
+    hire_date       TEXT DEFAULT '',
+    office_branch   TEXT DEFAULT '',
+    department      TEXT DEFAULT '',
+    fairgrit_user_id TEXT DEFAULT '',
+    address         TEXT DEFAULT '',
+    nearest_station TEXT DEFAULT '',
     created_at      TIMESTAMP DEFAULT NOW(),
     updated_at      TIMESTAMP DEFAULT NOW()
 );
@@ -204,11 +214,50 @@ CREATE TABLE IF NOT EXISTS engineer_assignments (
     unit_price      INTEGER,
     status          TEXT DEFAULT '稼働中',
     notes           TEXT DEFAULT '',
+    contract_type   TEXT DEFAULT '',
+    sales_person    TEXT DEFAULT '',
+    client_company_name TEXT DEFAULT '',
+    monthly_rate    INTEGER,
+    work_hours_lower REAL,
+    work_hours_upper REAL,
     created_at      TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_eng_assignments_engineer
     ON engineer_assignments(engineer_id);
+
+CREATE TABLE IF NOT EXISTS user_profiles (
+    id              TEXT PRIMARY KEY,
+    email           TEXT UNIQUE NOT NULL,
+    role            TEXT NOT NULL DEFAULT 'engineer',
+    engineer_id     INTEGER REFERENCES engineers(id) ON DELETE SET NULL,
+    display_name    TEXT DEFAULT '',
+    created_at      TIMESTAMP DEFAULT NOW(),
+    updated_at      TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_profiles_email
+    ON user_profiles(email);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_role
+    ON user_profiles(role);
+
+CREATE TABLE IF NOT EXISTS companies (
+    id              SERIAL PRIMARY KEY,
+    name            TEXT NOT NULL,
+    name_kana       TEXT DEFAULT '',
+    phone           TEXT DEFAULT '',
+    url             TEXT DEFAULT '',
+    prefecture      TEXT DEFAULT '',
+    tags            TEXT DEFAULT '',
+    contact_name    TEXT DEFAULT '',
+    contact_email   TEXT DEFAULT '',
+    notes           TEXT DEFAULT '',
+    created_at      TIMESTAMP DEFAULT NOW(),
+    updated_at      TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_companies_name
+    ON companies(name);
 
 CREATE TABLE IF NOT EXISTS matching_proposals (
     id              SERIAL PRIMARY KEY,
@@ -325,6 +374,16 @@ CREATE TABLE IF NOT EXISTS engineers (
     industry_experience TEXT DEFAULT '',
     skill_proficiency TEXT DEFAULT '{}',
     certifications  TEXT DEFAULT '',
+    email           TEXT DEFAULT '',
+    phone           TEXT DEFAULT '',
+    name_kana       TEXT DEFAULT '',
+    gender          TEXT DEFAULT '',
+    hire_date       TEXT DEFAULT '',
+    office_branch   TEXT DEFAULT '',
+    department      TEXT DEFAULT '',
+    fairgrit_user_id TEXT DEFAULT '',
+    address         TEXT DEFAULT '',
+    nearest_station TEXT DEFAULT '',
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -352,6 +411,12 @@ CREATE TABLE IF NOT EXISTS engineer_assignments (
     unit_price      INTEGER,
     status          TEXT DEFAULT '稼働中',
     notes           TEXT DEFAULT '',
+    contract_type   TEXT DEFAULT '',
+    sales_person    TEXT DEFAULT '',
+    client_company_name TEXT DEFAULT '',
+    monthly_rate    INTEGER,
+    work_hours_lower REAL,
+    work_hours_upper REAL,
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (engineer_id) REFERENCES engineers(id) ON DELETE CASCADE,
     FOREIGN KEY (listing_id) REFERENCES job_listings(id) ON DELETE SET NULL
@@ -359,6 +424,40 @@ CREATE TABLE IF NOT EXISTS engineer_assignments (
 
 CREATE INDEX IF NOT EXISTS idx_eng_assignments_engineer
     ON engineer_assignments(engineer_id);
+
+CREATE TABLE IF NOT EXISTS user_profiles (
+    id              TEXT PRIMARY KEY,
+    email           TEXT UNIQUE NOT NULL,
+    role            TEXT NOT NULL DEFAULT 'engineer',
+    engineer_id     INTEGER,
+    display_name    TEXT DEFAULT '',
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (engineer_id) REFERENCES engineers(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_profiles_email
+    ON user_profiles(email);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_role
+    ON user_profiles(role);
+
+CREATE TABLE IF NOT EXISTS companies (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    name            TEXT NOT NULL,
+    name_kana       TEXT DEFAULT '',
+    phone           TEXT DEFAULT '',
+    url             TEXT DEFAULT '',
+    prefecture      TEXT DEFAULT '',
+    tags            TEXT DEFAULT '',
+    contact_name    TEXT DEFAULT '',
+    contact_email   TEXT DEFAULT '',
+    notes           TEXT DEFAULT '',
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_companies_name
+    ON companies(name);
 
 CREATE TABLE IF NOT EXISTS matching_proposals (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -406,6 +505,52 @@ MIGRATIONS = [
     (12, "engineers.industry_experience", "ALTER TABLE engineers ADD COLUMN industry_experience TEXT DEFAULT ''"),
     (13, "engineers.skill_proficiency", "ALTER TABLE engineers ADD COLUMN skill_proficiency TEXT DEFAULT '{}'"),
     (14, "engineers.certifications", "ALTER TABLE engineers ADD COLUMN certifications TEXT DEFAULT ''"),
+    # --- Phase 1: 認証・権限 ---
+    (15, "user_profiles", """CREATE TABLE IF NOT EXISTS user_profiles (
+        id TEXT PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        role TEXT NOT NULL DEFAULT 'engineer',
+        engineer_id INTEGER REFERENCES engineers(id) ON DELETE SET NULL,
+        display_name TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )"""),
+    (16, "idx_user_profiles_email", "CREATE INDEX IF NOT EXISTS idx_user_profiles_email ON user_profiles(email)"),
+    (17, "idx_user_profiles_role", "CREATE INDEX IF NOT EXISTS idx_user_profiles_role ON user_profiles(role)"),
+    # --- Phase 2: engineers拡張 ---
+    (18, "engineers.email", "ALTER TABLE engineers ADD COLUMN email TEXT DEFAULT ''"),
+    (19, "engineers.phone", "ALTER TABLE engineers ADD COLUMN phone TEXT DEFAULT ''"),
+    (20, "engineers.name_kana", "ALTER TABLE engineers ADD COLUMN name_kana TEXT DEFAULT ''"),
+    (21, "engineers.gender", "ALTER TABLE engineers ADD COLUMN gender TEXT DEFAULT ''"),
+    (22, "engineers.hire_date", "ALTER TABLE engineers ADD COLUMN hire_date TEXT DEFAULT ''"),
+    (23, "engineers.office_branch", "ALTER TABLE engineers ADD COLUMN office_branch TEXT DEFAULT ''"),
+    (24, "engineers.department", "ALTER TABLE engineers ADD COLUMN department TEXT DEFAULT ''"),
+    (25, "engineers.fairgrit_user_id", "ALTER TABLE engineers ADD COLUMN fairgrit_user_id TEXT DEFAULT ''"),
+    (26, "engineers.address", "ALTER TABLE engineers ADD COLUMN address TEXT DEFAULT ''"),
+    (27, "engineers.nearest_station", "ALTER TABLE engineers ADD COLUMN nearest_station TEXT DEFAULT ''"),
+    # --- Phase 2: companiesテーブル ---
+    (28, "companies", """CREATE TABLE IF NOT EXISTS companies (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        name_kana TEXT DEFAULT '',
+        phone TEXT DEFAULT '',
+        url TEXT DEFAULT '',
+        prefecture TEXT DEFAULT '',
+        tags TEXT DEFAULT '',
+        contact_name TEXT DEFAULT '',
+        contact_email TEXT DEFAULT '',
+        notes TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )"""),
+    (29, "idx_companies_name", "CREATE INDEX IF NOT EXISTS idx_companies_name ON companies(name)"),
+    # --- Phase 2: engineer_assignments拡張 ---
+    (30, "engineer_assignments.contract_type", "ALTER TABLE engineer_assignments ADD COLUMN contract_type TEXT DEFAULT ''"),
+    (31, "engineer_assignments.sales_person", "ALTER TABLE engineer_assignments ADD COLUMN sales_person TEXT DEFAULT ''"),
+    (32, "engineer_assignments.client_company_name", "ALTER TABLE engineer_assignments ADD COLUMN client_company_name TEXT DEFAULT ''"),
+    (33, "engineer_assignments.monthly_rate", "ALTER TABLE engineer_assignments ADD COLUMN monthly_rate INTEGER"),
+    (34, "engineer_assignments.work_hours_lower", "ALTER TABLE engineer_assignments ADD COLUMN work_hours_lower REAL"),
+    (35, "engineer_assignments.work_hours_upper", "ALTER TABLE engineer_assignments ADD COLUMN work_hours_upper REAL"),
 ]
 
 
@@ -1102,8 +1247,12 @@ def insert_engineer(data: dict) -> int:
                   job_type_experience, position_experience, remote_preference,
                   career_desired_job_type, career_desired_skills, career_notes,
                   birth_date, education, industry_experience,
-                  skill_proficiency, certifications)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                  skill_proficiency, certifications,
+                  email, phone, name_kana, gender, hire_date,
+                  office_branch, department, fairgrit_user_id,
+                  address, nearest_station)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
         params = (
             data["name"],
             data.get("experience_years"),
@@ -1126,6 +1275,16 @@ def insert_engineer(data: dict) -> int:
             data.get("industry_experience", ""),
             data.get("skill_proficiency", "{}"),
             data.get("certifications", ""),
+            data.get("email", ""),
+            data.get("phone", ""),
+            data.get("name_kana", ""),
+            data.get("gender", ""),
+            data.get("hire_date", ""),
+            data.get("office_branch", ""),
+            data.get("department", ""),
+            data.get("fairgrit_user_id", ""),
+            data.get("address", ""),
+            data.get("nearest_station", ""),
         )
         if conn.is_pg:
             cursor = conn.execute(sql + " RETURNING id", params)
@@ -1167,6 +1326,16 @@ def update_engineer(eng_id: int, data: dict) -> bool:
             "industry_experience": "industry_experience",
             "skill_proficiency": "skill_proficiency",
             "certifications": "certifications",
+            "email": "email",
+            "phone": "phone",
+            "name_kana": "name_kana",
+            "gender": "gender",
+            "hire_date": "hire_date",
+            "office_branch": "office_branch",
+            "department": "department",
+            "fairgrit_user_id": "fairgrit_user_id",
+            "address": "address",
+            "nearest_station": "nearest_station",
         }
         for key, col in field_map.items():
             if key in data:
@@ -1363,8 +1532,10 @@ def insert_assignment(engineer_id: int, data: dict) -> int:
     with get_connection() as conn:
         sql = """INSERT INTO engineer_assignments
                  (engineer_id, listing_id, company_name, project_name,
-                  start_date, end_date, unit_price, status, notes)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                  start_date, end_date, unit_price, status, notes,
+                  contract_type, sales_person, client_company_name,
+                  monthly_rate, work_hours_lower, work_hours_upper)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
         params = (
             engineer_id,
             data.get("listing_id"),
@@ -1375,6 +1546,12 @@ def insert_assignment(engineer_id: int, data: dict) -> int:
             data.get("unit_price"),
             data.get("status", "稼働中"),
             data.get("notes", ""),
+            data.get("contract_type", ""),
+            data.get("sales_person", ""),
+            data.get("client_company_name", ""),
+            data.get("monthly_rate"),
+            data.get("work_hours_lower"),
+            data.get("work_hours_upper"),
         )
         if conn.is_pg:
             cursor = conn.execute(sql + " RETURNING id", params)
@@ -1704,3 +1881,120 @@ def get_matching_stats() -> dict:
         "closed": by_status.get("成約", 0),
         "rejected": by_status.get("見送り", 0),
     }
+
+
+# --- User Profiles ---
+
+def get_user_profile(user_id: str) -> Optional[dict]:
+    """Supabase Auth IDからユーザープロフィールを取得する。"""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM user_profiles WHERE id = ?", (user_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def get_user_profile_by_email(email: str) -> Optional[dict]:
+    """メールアドレスからユーザープロフィールを取得する。"""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM user_profiles WHERE email = ?", (email,)
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def upsert_user_profile(user_id: str, email: str, role: str = "engineer",
+                        engineer_id: Optional[int] = None,
+                        display_name: str = "") -> dict:
+    """ユーザープロフィールを作成または更新する。"""
+    with get_connection() as conn:
+        existing = conn.execute(
+            "SELECT * FROM user_profiles WHERE id = ?", (user_id,)
+        ).fetchone()
+        if existing:
+            if conn.is_pg:
+                conn.execute(
+                    """UPDATE user_profiles
+                       SET email = ?, role = ?, engineer_id = ?,
+                           display_name = ?, updated_at = NOW()
+                       WHERE id = ?""",
+                    (email, role, engineer_id, display_name, user_id),
+                )
+            else:
+                conn.execute(
+                    """UPDATE user_profiles
+                       SET email = ?, role = ?, engineer_id = ?,
+                           display_name = ?, updated_at = CURRENT_TIMESTAMP
+                       WHERE id = ?""",
+                    (email, role, engineer_id, display_name, user_id),
+                )
+        else:
+            conn.execute(
+                """INSERT INTO user_profiles (id, email, role, engineer_id, display_name)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (user_id, email, role, engineer_id, display_name),
+            )
+        row = conn.execute(
+            "SELECT * FROM user_profiles WHERE id = ?", (user_id,)
+        ).fetchone()
+        return dict(row)
+
+
+def list_user_profiles() -> list[dict]:
+    """全ユーザープロフィールを返す。"""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM user_profiles ORDER BY created_at"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def delete_user_profile(user_id: str) -> bool:
+    """ユーザープロフィールを削除する。"""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "DELETE FROM user_profiles WHERE id = ?", (user_id,)
+        )
+        return cursor.rowcount > 0
+
+
+# --- Companies ---
+
+def insert_company(data: dict) -> int:
+    """取引先を登録し、IDを返す。"""
+    with get_connection() as conn:
+        sql = """INSERT INTO companies
+                 (name, name_kana, phone, url, prefecture, tags,
+                  contact_name, contact_email, notes)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+        params = (
+            data["name"],
+            data.get("name_kana", ""),
+            data.get("phone", ""),
+            data.get("url", ""),
+            data.get("prefecture", ""),
+            data.get("tags", ""),
+            data.get("contact_name", ""),
+            data.get("contact_email", ""),
+            data.get("notes", ""),
+        )
+        if conn.is_pg:
+            cursor = conn.execute(sql + " RETURNING id", params)
+            return cursor.fetchone()["id"]
+        else:
+            cursor = conn.execute(sql, params)
+            return cursor.lastrowid
+
+
+def search_companies(keyword: str = "") -> list[dict]:
+    """取引先を検索する。"""
+    with get_connection() as conn:
+        query = "SELECT * FROM companies WHERE 1=1"
+        params: list = []
+        if keyword:
+            query += " AND (name LIKE ? OR name_kana LIKE ? OR contact_name LIKE ?)"
+            like = f"%{keyword}%"
+            params.extend([like, like, like])
+        query += " ORDER BY name"
+        rows = conn.execute(query, params).fetchall()
+        return [dict(r) for r in rows]

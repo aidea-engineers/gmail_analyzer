@@ -3,11 +3,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from typing import Optional
 
 from config import Config
+from core.auth import CurrentUser, require_admin
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -62,7 +63,7 @@ def _save_env(env: dict):
 
 
 @router.get("")
-def get_settings():
+def get_settings(user: CurrentUser = Depends(require_admin)):
     return {
         "gemini_model": Config.GEMINI_MODEL,
         "gemini_api_key_set": bool(Config.GEMINI_API_KEY),
@@ -76,7 +77,7 @@ def get_settings():
 
 
 @router.put("")
-def update_settings(body: SettingsUpdate):
+def update_settings(body: SettingsUpdate, user: CurrentUser = Depends(require_admin)):
     env = _load_env()
 
     if body.gemini_api_key is not None:

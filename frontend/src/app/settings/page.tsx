@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { getSettings, updateSettings, getFetchStatus } from "@/lib/api";
+import { useEffect, useState, useRef } from "react";
+import { getSettings, updateSettings, getFetchStatus, importDataCsv } from "@/lib/api";
+import { useAuth } from "@/components/AuthProvider";
 import type { Settings, FetchStatus } from "@/types";
 
 const MODEL_OPTIONS = [
@@ -221,6 +222,88 @@ export default function SettingsPage() {
       >
         {saving ? "保存中..." : "設定を保存"}
       </button>
+
+      {/* データインポート（管理者のみ） */}
+      <DataImportSection />
+    </div>
+  );
+}
+
+
+function DataImportSection() {
+  const { user } = useAuth();
+  if (!user?.is_admin) return null;
+
+  return (
+    <section
+      className="rounded-xl p-5 shadow-sm border mt-8"
+      style={{ background: "var(--card-bg)", borderColor: "var(--border)" }}
+    >
+      <h2 className="text-sm font-bold mb-4">データインポート（Fairgrit CSV）</h2>
+      <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
+        Fairgritからエクスポートした CSV をインポートできます（Shift-JIS / UTF-8 両対応）
+      </p>
+      <div className="space-y-4">
+        <ImportUploader label="社員情報" type="employees" />
+        <ImportUploader label="案件情報" type="assignments" />
+        <ImportUploader label="取引先情報" type="companies" />
+      </div>
+    </section>
+  );
+}
+
+
+function ImportUploader({ label, type }: { label: string; type: "employees" | "assignments" | "companies" }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [result, setResult] = useState<{ imported: number; updated?: number; errors: string[] } | null>(null);
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setResult(null);
+    try {
+      const res = await importDataCsv(type, file);
+      setResult(res as { imported: number; updated?: number; errors: string[] });
+    } catch (err) {
+      setResult({ imported: 0, errors: [err instanceof Error ? err.message : "インポートに失敗しました"] });
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  return (
+    <div className="p-3 rounded-lg" style={{ background: "var(--background)", border: "1px solid var(--border)" }}>
+      <div className="flex items-center gap-3">
+        <span className="text-sm font-medium flex-shrink-0" style={{ color: "var(--foreground)" }}>{label}</span>
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".csv"
+          onChange={handleUpload}
+          disabled={uploading}
+          className="text-sm flex-1"
+        />
+        {uploading && <span className="text-xs" style={{ color: "var(--muted)" }}>インポート中...</span>}
+      </div>
+      {result && (
+        <div className="mt-2 text-xs">
+          <p style={{ color: result.errors.length === 0 ? "green" : "var(--foreground)" }}>
+            インポート: {result.imported}件
+            {result.updated !== undefined && ` / 更新: ${result.updated}件`}
+          </p>
+          {result.errors.length > 0 && (
+            <div className="mt-1 text-red-500 max-h-24 overflow-y-auto">
+              {result.errors.map((err, i) => (
+                <p key={i}>{err}</p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
