@@ -1,15 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/components/AuthProvider";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loginSuccess, setLoginSuccess] = useState(false);
+
+  // AuthProviderがuserをセットしたらリダイレクト
+  useEffect(() => {
+    if (user) {
+      router.push("/");
+    }
+  }, [user, router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -29,12 +39,13 @@ export default function LoginPage() {
         setError(error.message === "Invalid login credentials"
           ? "メールアドレスまたはパスワードが正しくありません"
           : error.message);
+        setLoading(false);
       } else {
-        router.push("/");
+        // router.pushはuseEffectでuserが設定されたときに実行
+        setLoginSuccess(true);
       }
     } catch {
       setError("ログインに失敗しました");
-    } finally {
       setLoading(false);
     }
   }
@@ -98,11 +109,11 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || loginSuccess}
             className="w-full py-2.5 rounded-lg text-sm font-medium text-white transition-colors"
-            style={{ background: loading ? "#6b7280" : "var(--primary)" }}
+            style={{ background: (loading || loginSuccess) ? "#6b7280" : "var(--primary)" }}
           >
-            {loading ? "ログイン中..." : "ログイン"}
+            {loginSuccess ? "認証中..." : loading ? "ログイン中..." : "ログイン"}
           </button>
         </form>
       </div>

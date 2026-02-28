@@ -25,59 +25,14 @@ import type {
   CsvImportResult,
   CategorizedSkills,
 } from "@/types";
-
-const EMPTY_FORM: EngineerForm = {
-  name: "",
-  skills: [],
-  skills_other: "",
-  experience_years: "",
-  current_price: "",
-  desired_price_min: "",
-  desired_price_max: "",
-  status: "待機中",
-  preferred_areas: [],
-  preferred_areas_other: "",
-  available_from: "",
-  notes: "",
-  processes: [],
-  job_type_experience: [],
-  position_experience: [],
-  remote_preference: "",
-  career_desired_job_type: [],
-  career_desired_skills: "",
-  career_notes: "",
-  birth_date: "",
-  education: "",
-  industry_experience: [],
-  skill_proficiency: {},
-  certifications: "",
-};
-
-const SKILL_CATEGORY_COLORS: Record<string, string> = {
-  "言語": "bg-blue-100 text-blue-700",
-  "FW": "bg-purple-100 text-purple-700",
-  "インフラ": "bg-orange-100 text-orange-700",
-  "DB": "bg-green-100 text-green-700",
-  "その他": "bg-gray-100 text-gray-600",
-};
-
-const SKILL_CATEGORY_ORDER = ["言語", "FW", "インフラ", "DB", "その他"];
-
-const SKILL_CHECKBOXES: Record<string, string[]> = {
-  "言語": ["Java", "Python", "TypeScript", "JavaScript", "Go", "C#", "Ruby", "PHP", "Swift", "Kotlin", "C", "C++", "Rust", "Scala", "Perl", "R", "COBOL", "VB.NET", "Dart", "Shell"],
-  "FW": ["React", "Vue.js", "Angular", "Next.js", "Spring Boot", "Django", "Flask", "Laravel", "Ruby on Rails", ".NET", "Express.js", "NestJS", "Flutter", "Unity"],
-  "インフラ": ["AWS", "Azure", "GCP", "Docker", "Kubernetes", "Terraform", "Linux", "Jenkins", "Ansible"],
-  "DB": ["PostgreSQL", "MySQL", "Oracle", "SQL Server", "MongoDB", "Redis", "DynamoDB", "Elasticsearch"],
-};
-
-const ALL_CHECKBOX_SKILLS = Object.values(SKILL_CHECKBOXES).flat();
-
-const STATUS_COLORS: Record<string, string> = {
-  "待機中": "bg-green-100 text-green-800",
-  "稼働中": "bg-blue-100 text-blue-800",
-  "面談中": "bg-yellow-100 text-yellow-800",
-  "休止中": "bg-gray-100 text-gray-500",
-};
+import {
+  EMPTY_FORM,
+  SKILL_CATEGORY_COLORS,
+  SKILL_CATEGORY_ORDER,
+  SKILL_CHECKBOXES,
+  ALL_CHECKBOX_SKILLS,
+  STATUS_COLORS,
+} from "@/lib/constants";
 
 export default function EngineersPage() {
   const router = useRouter();

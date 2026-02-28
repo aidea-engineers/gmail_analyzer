@@ -276,6 +276,67 @@ export function getEngineersBrief() {
   );
 }
 
+/* User Management (Admin) */
+export function listUsers() {
+  return fetchAPI<{ users: import("@/types").UserProfile[] }>("/api/auth/users");
+}
+
+export function createUser(data: {
+  email: string;
+  password: string;
+  role: string;
+  engineer_id?: number | null;
+  display_name?: string;
+}) {
+  return fetchAPI<{ message: string; profile: import("@/types").UserProfile }>(
+    "/api/auth/users",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }
+  );
+}
+
+export function updateUser(
+  userId: string,
+  data: { role?: string; engineer_id?: number | null; display_name?: string }
+) {
+  return fetchAPI<{ message: string; profile: import("@/types").UserProfile }>(
+    `/api/auth/users/${userId}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }
+  );
+}
+
+export function deleteUser(userId: string) {
+  return fetchAPI<{ message: string }>(`/api/auth/users/${userId}`, {
+    method: "DELETE",
+  });
+}
+
+export function resetUserPassword(userId: string, newPassword: string) {
+  return fetchAPI<{ message: string }>(
+    `/api/auth/users/${userId}/reset-password`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ new_password: newPassword }),
+    }
+  );
+}
+
+export function changeMyPassword(newPassword: string) {
+  return fetchAPI<{ message: string }>("/api/auth/me/password", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ new_password: newPassword }),
+  });
+}
+
 /* Import (Phase 2) */
 export async function importDataCsv(type: "employees" | "assignments" | "companies", file: File) {
   const authHeaders = await getAuthHeaders();

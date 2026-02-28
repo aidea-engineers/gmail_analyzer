@@ -242,6 +242,18 @@ export interface CsvImportResult {
   errors: string[];
 }
 
+/* User Profile */
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  role: string;
+  engineer_id: number | null;
+  display_name: string;
+  created_at: string;
+  updated_at: string;
+}
+
 /* Matching */
 
 export interface MatchScoreDetail {

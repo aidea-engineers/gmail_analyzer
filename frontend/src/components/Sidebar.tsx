@@ -10,6 +10,7 @@ const ADMIN_NAV_ITEMS = [
   { href: "/search", label: "案件検索", icon: "🔍" },
   { href: "/engineers", label: "エンジニア管理", icon: "👤" },
   { href: "/matching", label: "マッチング", icon: "🤝" },
+  { href: "/admin/users", label: "アカウント管理", icon: "🔑" },
   { href: "/fetch", label: "メール取得", icon: "📧" },
   { href: "/settings", label: "設定", icon: "⚙️" },
 ];
