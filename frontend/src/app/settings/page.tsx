@@ -256,7 +256,7 @@ function DataImportSection() {
 function ImportUploader({ label, type }: { label: string; type: "employees" | "assignments" | "companies" }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
-  const [result, setResult] = useState<{ imported: number; updated?: number; errors: string[] } | null>(null);
+  const [result, setResult] = useState<{ imported: number; updated?: number; skipped?: number; errors: string[] } | null>(null);
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -266,7 +266,7 @@ function ImportUploader({ label, type }: { label: string; type: "employees" | "a
     setResult(null);
     try {
       const res = await importDataCsv(type, file);
-      setResult(res as { imported: number; updated?: number; errors: string[] });
+      setResult(res as { imported: number; updated?: number; skipped?: number; errors: string[] });
     } catch (err) {
       setResult({ imported: 0, errors: [err instanceof Error ? err.message : "インポートに失敗しました"] });
     } finally {
@@ -294,6 +294,7 @@ function ImportUploader({ label, type }: { label: string; type: "employees" | "a
           <p style={{ color: result.errors.length === 0 ? "green" : "var(--foreground)" }}>
             インポート: {result.imported}件
             {result.updated !== undefined && ` / 更新: ${result.updated}件`}
+            {result.skipped !== undefined && result.skipped > 0 && ` / スキップ(重複): ${result.skipped}件`}
           </p>
           {result.errors.length > 0 && (
             <div className="mt-1 text-red-500 max-h-24 overflow-y-auto">

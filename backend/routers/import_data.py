@@ -57,7 +57,14 @@ def _strip_yen(val: str | None) -> str | None:
     """「850000円」→「850000」のように円記号を除去する"""
     if not val:
         return val
-    return val.strip().replace("円", "")
+    return val.strip().replace("円", "").replace("¥", "")
+
+
+def _strip_hours(val: str | None) -> str | None:
+    """「140時間」→「140」のように時間単位を除去する"""
+    if not val:
+        return val
+    return val.strip().replace("時間", "").replace("分", "")
 
 
 @router.post("/employees")
@@ -145,21 +152,36 @@ async def import_assignments(
     start_line = 0
     if len(lines) > 1:
         for i, line in enumerate(lines[:3]):
-            if "氏名" in line or "案件" in line or "name" in line.lower():
+            if "氏名" in line or "案件" in line or "参画者" in line or "name" in line.lower():
                 start_line = i
                 break
 
     csv_text = "\n".join(lines[start_line:])
     reader = csv.DictReader(io.StringIO(csv_text))
     imported = 0
+    skipped = 0
     errors = []
+
+    # Fairgrit案件CSVは月ごとの請求行なので、同じ(参画者+案件名+契約期間)は重複排除
+    seen_assignments: set[tuple[str, str, str, str]] = set()
 
     for i, row in enumerate(reader, start=start_line + 2):
         eng_name = (
-            row.get("氏名") or row.get("名前") or row.get("name") or ""
+            row.get("参画者") or row.get("氏名") or row.get("名前") or row.get("name") or ""
         ).strip()
         if not eng_name:
             continue
+
+        project_name = (row.get("案件名") or row.get("project_name") or "").strip()
+        start_date = (row.get("契約期間(開始)") or row.get("参画開始日") or row.get("start_date") or "").strip()
+        end_date = (row.get("契約期間(終了)") or row.get("参画終了日") or row.get("end_date") or "").strip()
+
+        # 重複チェック
+        dedup_key = (eng_name, project_name, start_date, end_date)
+        if dedup_key in seen_assignments:
+            skipped += 1
+            continue
+        seen_assignments.add(dedup_key)
 
         # エンジニアを名前で検索
         existing = search_engineers(keyword=eng_name)
@@ -172,18 +194,32 @@ async def import_assignments(
             errors.append(f"{i}行目: エンジニア '{eng_name}' が見つかりません")
             continue
 
+        # 単金額の円・¥記号を除去
+        raw_price = _strip_yen(
+            row.get("単金額") or row.get("単価") or row.get("unit_price")
+        )
+        raw_monthly = _strip_yen(
+            row.get("月額") or row.get("monthly_rate")
+        )
+        unit_price = _safe_int(raw_price)
+        monthly_rate = _safe_int(raw_monthly)
+        # 報酬形態が「月額」で月額未設定なら単金額を月額にも設定
+        payment_type = (row.get("報酬形態") or "").strip()
+        if payment_type == "月額" and not monthly_rate and unit_price:
+            monthly_rate = unit_price
+
         data = {
-            "company_name": (row.get("企業名") or row.get("SES先企業名") or "").strip(),
-            "project_name": (row.get("案件名") or row.get("project_name") or "").strip(),
-            "start_date": (row.get("参画開始日") or row.get("start_date") or "").strip(),
-            "end_date": (row.get("参画終了日") or row.get("end_date") or "").strip(),
-            "unit_price": _safe_int(row.get("単価") or row.get("unit_price")),
-            "monthly_rate": _safe_int(row.get("月額") or row.get("monthly_rate")),
-            "contract_type": (row.get("契約形態") or row.get("contract_type") or "").strip(),
-            "sales_person": (row.get("営業担当") or row.get("sales_person") or "").strip(),
+            "company_name": (row.get("取引先会社名") or row.get("企業名") or row.get("SES先企業名") or "").strip(),
+            "project_name": project_name,
+            "start_date": start_date,
+            "end_date": end_date,
+            "unit_price": unit_price,
+            "monthly_rate": monthly_rate,
+            "contract_type": (row.get("契約種別") or row.get("契約形態") or row.get("contract_type") or "").strip(),
+            "sales_person": (row.get("営業担当者") or row.get("営業担当") or row.get("sales_person") or "").strip(),
             "client_company_name": (row.get("エンド企業名") or row.get("client_company_name") or "").strip(),
-            "work_hours_lower": _safe_float(row.get("稼働時間下限") or row.get("work_hours_lower")),
-            "work_hours_upper": _safe_float(row.get("稼働時間上限") or row.get("work_hours_upper")),
+            "work_hours_lower": _safe_float(_strip_hours(row.get("精算枠(下限)") or row.get("稼働時間下限") or row.get("work_hours_lower"))),
+            "work_hours_upper": _safe_float(_strip_hours(row.get("精算枠(上限)") or row.get("稼働時間上限") or row.get("work_hours_upper"))),
             "status": (row.get("ステータス") or "稼働中").strip(),
         }
 
@@ -193,7 +229,7 @@ async def import_assignments(
         except Exception as e:
             errors.append(f"{i}行目: {eng_name} — {e}")
 
-    return {"imported": imported, "errors": errors}
+    return {"imported": imported, "skipped": skipped, "errors": errors}
 
 
 @router.post("/companies")
@@ -209,31 +245,40 @@ async def import_companies(
     start_line = 0
     if len(lines) > 1:
         for i, line in enumerate(lines[:3]):
-            if "企業名" in line or "会社名" in line or "name" in line.lower():
+            if "企業名" in line or "会社名" in line or "社名" in line or "name" in line.lower():
                 start_line = i
                 break
 
     csv_text = "\n".join(lines[start_line:])
     reader = csv.DictReader(io.StringIO(csv_text))
     imported = 0
+    skipped = 0
     errors = []
+
+    # Fairgrit取引先CSVは支社・担当者ごとに行があるので社名で重複排除（最初の行を採用）
+    seen_companies: set[str] = set()
 
     for i, row in enumerate(reader, start=start_line + 2):
         name = (
-            row.get("企業名") or row.get("会社名") or row.get("name") or ""
+            row.get("社名") or row.get("企業名") or row.get("会社名") or row.get("name") or ""
         ).strip()
         if not name:
             continue
 
+        if name in seen_companies:
+            skipped += 1
+            continue
+        seen_companies.add(name)
+
         data = {
             "name": name,
-            "name_kana": (row.get("企業名（カナ）") or row.get("フリガナ") or "").strip(),
+            "name_kana": (row.get("社名(カナ)") or row.get("企業名（カナ）") or row.get("フリガナ") or "").strip(),
             "phone": (row.get("電話番号") or row.get("phone") or "").strip(),
             "url": (row.get("URL") or row.get("ホームページ") or "").strip(),
             "prefecture": (row.get("都道府県") or row.get("prefecture") or "").strip(),
             "tags": (row.get("タグ") or row.get("tags") or "").strip(),
-            "contact_name": (row.get("担当者名") or row.get("contact_name") or "").strip(),
-            "contact_email": (row.get("担当者メール") or row.get("contact_email") or "").strip(),
+            "contact_name": (row.get("社員：名前(漢字)") or row.get("担当者名") or row.get("contact_name") or "").strip(),
+            "contact_email": (row.get("社員：営業用メールアドレス") or row.get("担当者メール") or row.get("contact_email") or "").strip(),
             "notes": (row.get("備考") or row.get("notes") or "").strip(),
         }
 
@@ -243,4 +288,4 @@ async def import_companies(
         except Exception as e:
             errors.append(f"{i}行目: {name} — {e}")
 
-    return {"imported": imported, "errors": errors}
+    return {"imported": imported, "skipped": skipped, "errors": errors}
