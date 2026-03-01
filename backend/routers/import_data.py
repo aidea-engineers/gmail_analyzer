@@ -91,6 +91,10 @@ async def import_employees(
     updated = 0
     errors = []
 
+    # 全エンジニアを一括取得してキャッシュ
+    all_engineers = search_engineers(keyword="")
+    engineer_map: dict[str, dict] = {e["name"]: e for e in all_engineers}
+
     for i, row in enumerate(reader, start=start_line + 2):
         name = (
             row.get("名前(漢字)") or row.get("氏名") or row.get("名前") or ""
@@ -98,13 +102,7 @@ async def import_employees(
         if not name:
             continue
 
-        # 既存エンジニアを名前で検索
-        existing = search_engineers(keyword=name)
-        exact_match = None
-        for e in existing:
-            if e["name"] == name:
-                exact_match = e
-                break
+        exact_match = engineer_map.get(name)
 
         data = {
             "name": name,
@@ -162,6 +160,10 @@ async def import_assignments(
     skipped = 0
     errors = []
 
+    # 全エンジニアを一括取得してキャッシュ（行ごとにDB検索しない）
+    all_engineers = search_engineers(keyword="")
+    engineer_map: dict[str, int] = {e["name"]: e["id"] for e in all_engineers}
+
     # Fairgrit案件CSVは月ごとの請求行なので、同じ(参画者+案件名+契約期間)は重複排除
     seen_assignments: set[tuple[str, str, str, str]] = set()
 
@@ -183,14 +185,9 @@ async def import_assignments(
             continue
         seen_assignments.add(dedup_key)
 
-        # エンジニアを名前で検索
-        existing = search_engineers(keyword=eng_name)
-        eng = None
-        for e in existing:
-            if e["name"] == eng_name:
-                eng = e
-                break
-        if not eng:
+        # エンジニアをキャッシュから検索
+        eng_id = engineer_map.get(eng_name)
+        if not eng_id:
             errors.append(f"{i}行目: エンジニア '{eng_name}' が見つかりません")
             continue
 
@@ -224,7 +221,7 @@ async def import_assignments(
         }
 
         try:
-            insert_assignment(eng["id"], data)
+            insert_assignment(eng_id, data)
             imported += 1
         except Exception as e:
             errors.append(f"{i}行目: {eng_name} — {e}")
