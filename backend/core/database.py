@@ -1471,15 +1471,26 @@ def search_engineers(
 
     with get_connection() as conn:
         rows = conn.execute(query, params).fetchall()
-        results = []
-        for row in rows:
-            eng = dict(row)
-            sk = conn.execute(
-                "SELECT skill_name FROM engineer_skills WHERE engineer_id = ?",
-                (eng["id"],),
-            ).fetchall()
-            eng["skills"] = [s["skill_name"] for s in sk]
-            results.append(eng)
+        if not rows:
+            return []
+
+        results = [dict(row) for row in rows]
+        eng_ids = [e["id"] for e in results]
+
+        # 全エンジニアのスキルを1クエリで取得（N+1解消）
+        placeholders = ",".join("?" * len(eng_ids))
+        skill_rows = conn.execute(
+            f"SELECT engineer_id, skill_name FROM engineer_skills WHERE engineer_id IN ({placeholders}) ORDER BY skill_name",
+            eng_ids,
+        ).fetchall()
+
+        skills_map: dict[int, list[str]] = {e["id"]: [] for e in results}
+        for s in skill_rows:
+            skills_map[s["engineer_id"]].append(s["skill_name"])
+
+        for eng in results:
+            eng["skills"] = skills_map[eng["id"]]
+
         return results
 
 
