@@ -278,6 +278,19 @@ CREATE INDEX IF NOT EXISTS idx_proposals_listing
 CREATE INDEX IF NOT EXISTS idx_proposals_status
     ON matching_proposals(status);
 
+CREATE TABLE IF NOT EXISTS invite_logs (
+    id              SERIAL PRIMARY KEY,
+    user_id         TEXT NOT NULL,
+    email           TEXT NOT NULL,
+    invited_by      TEXT NOT NULL,
+    created_at      TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_invite_logs_user_id
+    ON invite_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_invite_logs_email
+    ON invite_logs(email);
+
 CREATE TABLE IF NOT EXISTS schema_migrations (
     version     INTEGER PRIMARY KEY,
     description TEXT DEFAULT '',
@@ -480,6 +493,14 @@ CREATE INDEX IF NOT EXISTS idx_proposals_listing
 CREATE INDEX IF NOT EXISTS idx_proposals_status
     ON matching_proposals(status);
 
+CREATE TABLE IF NOT EXISTS invite_logs (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         TEXT NOT NULL,
+    email           TEXT NOT NULL,
+    invited_by      TEXT NOT NULL,
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS schema_migrations (
     version     INTEGER PRIMARY KEY,
     description TEXT DEFAULT '',
@@ -551,6 +572,16 @@ MIGRATIONS = [
     (33, "engineer_assignments.monthly_rate", "ALTER TABLE engineer_assignments ADD COLUMN monthly_rate INTEGER"),
     (34, "engineer_assignments.work_hours_lower", "ALTER TABLE engineer_assignments ADD COLUMN work_hours_lower REAL"),
     (35, "engineer_assignments.work_hours_upper", "ALTER TABLE engineer_assignments ADD COLUMN work_hours_upper REAL"),
+    # --- Phase 3: 招待ログ ---
+    (36, "invite_logs", """CREATE TABLE IF NOT EXISTS invite_logs (
+        id INTEGER PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        email TEXT NOT NULL,
+        invited_by TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )"""),
+    (37, "idx_invite_logs_user_id", "CREATE INDEX IF NOT EXISTS idx_invite_logs_user_id ON invite_logs(user_id)"),
+    (38, "idx_invite_logs_email", "CREATE INDEX IF NOT EXISTS idx_invite_logs_email ON invite_logs(email)"),
 ]
 
 
@@ -1967,6 +1998,23 @@ def delete_user_profile(user_id: str) -> bool:
             "DELETE FROM user_profiles WHERE id = ?", (user_id,)
         )
         return cursor.rowcount > 0
+
+
+# --- Invite Logs ---
+
+def create_invite_log(user_id: str, email: str, invited_by: str) -> dict:
+    """招待ログを記録する。"""
+    with get_connection() as conn:
+        conn.execute(
+            """INSERT INTO invite_logs (user_id, email, invited_by)
+               VALUES (?, ?, ?)""",
+            (user_id, email, invited_by),
+        )
+        row = conn.execute(
+            "SELECT * FROM invite_logs WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
+            (user_id,),
+        ).fetchone()
+        return dict(row) if row else {}
 
 
 # --- Companies ---

@@ -329,6 +329,27 @@ export function resetUserPassword(userId: string, newPassword: string) {
   );
 }
 
+export function inviteUser(data: {
+  email: string;
+  engineer_id?: number | null;
+  display_name?: string;
+}) {
+  return fetchAPI<{ message: string; profile: import("@/types").UserProfile }>(
+    "/api/auth/invite",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }
+  );
+}
+
+export function reinviteUser(userId: string) {
+  return fetchAPI<{ message: string }>(`/api/auth/reinvite/${userId}`, {
+    method: "POST",
+  });
+}
+
 export function changeMyPassword(newPassword: string) {
   return fetchAPI<{ message: string }>("/api/auth/me/password", {
     method: "PUT",

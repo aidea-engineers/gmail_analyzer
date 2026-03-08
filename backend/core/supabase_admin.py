@@ -83,6 +83,42 @@ async def delete_user(user_id: str) -> None:
         raise RuntimeError(f"ユーザー削除に失敗しました: {detail}")
 
 
+async def invite_user(email: str, redirect_to: str = "") -> str:
+    """Supabase Auth でユーザーを招待（招待メール送信）し、UUID を返す。
+
+    inviteUserByEmail 相当: パスワード未設定のユーザーを作成し、
+    招待メール（マジックリンク）を送信する。
+
+    Raises:
+        RuntimeError: API エラー時
+    """
+    if not is_configured():
+        raise RuntimeError("SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY が未設定です")
+
+    payload: dict = {
+        "email": email,
+    }
+    if redirect_to:
+        payload["redirect_to"] = redirect_to
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            f"{_GOTRUE_BASE}/invite",
+            headers=_headers(),
+            json=payload,
+        )
+    if resp.status_code not in (200, 201):
+        detail = resp.text
+        try:
+            detail = resp.json().get("msg", resp.text)
+        except Exception:
+            pass
+        logger.error("Supabase invite_user failed: %s %s", resp.status_code, detail)
+        raise RuntimeError(f"招待メール送信に失敗しました: {detail}")
+
+    return resp.json()["id"]
+
+
 async def update_user_password(user_id: str, new_password: str) -> None:
     """Supabase Auth ユーザーのパスワードを変更する。"""
     if not is_configured():

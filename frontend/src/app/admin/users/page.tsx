@@ -7,6 +7,8 @@ import {
   updateUser,
   deleteUser,
   resetUserPassword,
+  inviteUser,
+  reinviteUser,
   getEngineersBrief,
 } from "@/lib/api";
 import type { UserProfile, EngineerBrief } from "@/types";
@@ -37,6 +39,15 @@ export default function AdminUsersPage() {
     display_name: "",
   });
   const [saving, setSaving] = useState(false);
+
+  // 招待フォーム
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteForm, setInviteForm] = useState({
+    email: "",
+    engineer_id: "" as string,
+    display_name: "",
+  });
+  const [inviting, setInviting] = useState(false);
 
   // PW リセット
   const [pwResetId, setPwResetId] = useState<string | null>(null);
@@ -146,6 +157,41 @@ export default function AdminUsersPage() {
     }
   };
 
+  const handleInvite = async () => {
+    clearMessages();
+    if (!inviteForm.email) {
+      setError("メールアドレスは必須です");
+      return;
+    }
+    setInviting(true);
+    try {
+      await inviteUser({
+        email: inviteForm.email,
+        engineer_id: inviteForm.engineer_id ? Number(inviteForm.engineer_id) : null,
+        display_name: inviteForm.display_name,
+      });
+      setSuccess("招待メールを送信しました");
+      setInviteForm({ email: "", engineer_id: "", display_name: "" });
+      setShowInvite(false);
+      await load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  const handleReinvite = async (u: UserProfile) => {
+    clearMessages();
+    if (!confirm(`${u.email} に招待メールを再送しますか？`)) return;
+    try {
+      await reinviteUser(u.id);
+      setSuccess("招待メールを再送しました");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   const engineerName = (engId: number | null) => {
     if (!engId) return "-";
     const eng = engineers.find((e) => e.id === engId);
@@ -167,14 +213,90 @@ export default function AdminUsersPage() {
         <div className="mb-4 p-3 rounded-lg bg-green-50 text-green-700 text-sm">{success}</div>
       )}
 
-      {/* 新規作成ボタン */}
-      <button
-        onClick={() => { setShowCreate(!showCreate); clearMessages(); }}
-        className="mb-4 px-4 py-2 rounded-lg text-sm text-white"
-        style={{ background: "var(--primary)" }}
-      >
-        {showCreate ? "キャンセル" : "新規ユーザー作成"}
-      </button>
+      {/* アクションボタン */}
+      <div className="flex gap-2 mb-4">
+        <button
+          onClick={() => { setShowInvite(!showInvite); setShowCreate(false); clearMessages(); }}
+          className="px-4 py-2 rounded-lg text-sm text-white"
+          style={{ background: showInvite ? "#6b7280" : "var(--primary)" }}
+        >
+          {showInvite ? "キャンセル" : "招待メール送信"}
+        </button>
+        <button
+          onClick={() => { setShowCreate(!showCreate); setShowInvite(false); clearMessages(); }}
+          className="px-4 py-2 rounded-lg text-sm"
+          style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}
+        >
+          {showCreate ? "キャンセル" : "手動ユーザー作成"}
+        </button>
+      </div>
+
+      {/* 招待フォーム */}
+      {showInvite && (
+        <div
+          className="mb-6 p-4 rounded-xl space-y-3"
+          style={{ background: "var(--card-bg)", border: "1px solid var(--border)" }}
+        >
+          <h2 className="font-semibold text-sm" style={{ color: "var(--foreground)" }}>
+            エンジニア招待
+          </h2>
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            招待メールが送信され、受信者がパスワードを設定してログインできます。
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>
+                メールアドレス *
+              </label>
+              <input
+                type="email"
+                value={inviteForm.email}
+                onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg text-sm"
+                style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}
+              />
+            </div>
+            <div>
+              <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>
+                紐付けエンジニア
+              </label>
+              <select
+                value={inviteForm.engineer_id}
+                onChange={(e) => setInviteForm({ ...inviteForm, engineer_id: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg text-sm"
+                style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}
+              >
+                <option value="">未設定（後で紐付け）</option>
+                {engineers.map((eng) => (
+                  <option key={eng.id} value={eng.id}>
+                    {eng.name} ({eng.status})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>
+                表示名
+              </label>
+              <input
+                type="text"
+                value={inviteForm.display_name}
+                onChange={(e) => setInviteForm({ ...inviteForm, display_name: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg text-sm"
+                style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}
+              />
+            </div>
+          </div>
+          <button
+            onClick={handleInvite}
+            disabled={inviting}
+            className="px-4 py-2 rounded-lg text-sm text-white disabled:opacity-50"
+            style={{ background: "var(--primary)" }}
+          >
+            {inviting ? "送信中..." : "招待メールを送信"}
+          </button>
+        </div>
+      )}
 
       {/* 新規作成フォーム */}
       {showCreate && (
@@ -375,6 +497,13 @@ export default function AdminUsersPage() {
                         style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}
                       >
                         編集
+                      </button>
+                      <button
+                        onClick={() => handleReinvite(u)}
+                        className="px-3 py-1 rounded text-xs"
+                        style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}
+                      >
+                        再招待
                       </button>
                       <button
                         onClick={() => { setPwResetId(u.id); setNewPassword(""); clearMessages(); }}

@@ -8,8 +8,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const pathname = usePathname();
 
-  // ログインページはSidebarなしで表示
-  if (pathname === "/login") {
+  // ログインページ・パスワード設定ページはSidebarなしで表示
+  if (pathname === "/login" || pathname === "/set-password") {
     return <>{children}</>;
   }
 
@@ -27,6 +27,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     // クライアントサイドリダイレクト
     if (typeof window !== "undefined") {
       window.location.href = "/login";
+    }
+    return null;
+  }
+
+  // エンジニアロールでプロフィール未紐付け → マイプロフィールに強制リダイレクト
+  if (
+    user.role === "engineer" &&
+    !user.engineer_id &&
+    pathname !== "/my-profile"
+  ) {
+    if (typeof window !== "undefined") {
+      window.location.href = "/my-profile";
     }
     return null;
   }

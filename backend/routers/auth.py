@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -33,6 +34,12 @@ class UserProfileCreate(BaseModel):
     email: str
     password: str
     role: str = "engineer"
+    engineer_id: Optional[int] = None
+    display_name: str = ""
+
+
+class InviteRequest(BaseModel):
+    email: str
     engineer_id: Optional[int] = None
     display_name: str = ""
 
@@ -97,6 +104,86 @@ async def create_user(
         display_name=body.display_name,
     )
     return {"message": "作成しました", "profile": profile}
+
+
+@router.post("/invite")
+async def invite_user(
+    body: InviteRequest,
+    user: CurrentUser = Depends(require_admin),
+):
+    """エンジニアを招待する（管理者のみ）。
+
+    1. Supabase Auth に招待メールを送信（パスワード未設定で作成）
+    2. user_profiles にengineerロールで紐付けレコードを作成
+    """
+    if not supabase_admin.is_configured():
+        raise HTTPException(status_code=400, detail="Supabase Admin APIが未設定です")
+
+    # 既存ユーザーチェック
+    from core.database import get_user_profile_by_email
+    existing = get_user_profile_by_email(body.email)
+    if existing:
+        raise HTTPException(status_code=409, detail="このメールアドレスは既に登録されています")
+
+    # リダイレクト先を許可ドメインに固定
+    frontend_url = os.getenv("FRONTEND_URL", "https://gmail-analyzer-nu.vercel.app")
+    redirect_to = f"{frontend_url}/set-password"
+
+    try:
+        auth_uid = await supabase_admin.invite_user(body.email, redirect_to=redirect_to)
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # user_profiles に保存（ロールはengineer固定）
+    profile = upsert_user_profile(
+        user_id=auth_uid,
+        email=body.email,
+        role="engineer",
+        engineer_id=body.engineer_id,
+        display_name=body.display_name,
+    )
+
+    # 招待履歴を記録
+    from core.database import create_invite_log
+    create_invite_log(
+        user_id=auth_uid,
+        email=body.email,
+        invited_by=user.id,
+    )
+
+    return {"message": "招待メールを送信しました", "profile": profile}
+
+
+@router.post("/reinvite/{user_id}")
+async def reinvite_user(
+    user_id: str,
+    user: CurrentUser = Depends(require_admin),
+):
+    """招待メールを再送する（管理者のみ）。"""
+    existing = get_user_profile(user_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="ユーザーが見つかりません")
+
+    if not supabase_admin.is_configured():
+        raise HTTPException(status_code=400, detail="Supabase Admin APIが未設定です")
+
+    frontend_url = os.getenv("FRONTEND_URL", "https://gmail-analyzer-nu.vercel.app")
+    redirect_to = f"{frontend_url}/set-password"
+
+    try:
+        await supabase_admin.invite_user(existing["email"], redirect_to=redirect_to)
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # 再招待履歴を記録
+    from core.database import create_invite_log
+    create_invite_log(
+        user_id=user_id,
+        email=existing["email"],
+        invited_by=user.id,
+    )
+
+    return {"message": "招待メールを再送しました"}
 
 
 @router.put("/users/{user_id}")

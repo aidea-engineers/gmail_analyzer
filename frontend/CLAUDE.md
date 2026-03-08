@@ -38,7 +38,7 @@ The backend must be running at `localhost:8000` for local development (or set `N
 - **`src/components/AppShell.tsx`** — Auth guard wrapper. Redirects unauthenticated users to `/login`. Controls Sidebar visibility (hidden on login page). Responsive layout with `lg:ml-56`.
 - **`src/components/Sidebar.tsx`** — Role-based navigation: admin sees all 6 menu items, engineer sees only "My Profile". Displays user email + logout button.
 
-### Pages (8 pages)
+### Pages (9 pages)
 
 | Route | File | Purpose | Auth |
 |-------|------|---------|------|
@@ -49,6 +49,7 @@ The backend must be running at `localhost:8000` for local development (or set `N
 | `/settings` | `settings/page.tsx` | Settings — Gmail/Gemini/processing parameters | Admin |
 | `/engineers` | `engineers/page.tsx` | Engineer management — CRUD, skills, pricing, area, processes, CSV import/export | Admin |
 | `/matching` | `matching/page.tsx` | Matching — engineer↔listing proposals, score display, status management (2 tabs) | Admin |
+| `/admin/users` | `admin/users/page.tsx` | User management — CRUD, role assignment, password reset, engineer linking | Admin |
 | `/my-profile` | `my-profile/page.tsx` | My Profile — engineer's own info, skills, assignments (read-only) | Engineer |
 
 ### Key Modules

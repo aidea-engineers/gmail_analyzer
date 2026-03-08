@@ -138,6 +138,7 @@ require_admin() / require_auth() で権限チェック
 | `/settings` | 設定 — Gmail/Gemini/処理パラメータ | admin |
 | `/engineers` | エンジニア管理 — CRUD、スキル・単価・エリア・工程管理、CSV入出力 | admin |
 | `/matching` | マッチング — 案件↔エンジニア提案、スコア表示、ステータス管理 | admin |
+| `/admin/users` | アカウント管理 — ユーザーCRUD、ロール設定、パスワードリセット、エンジニア紐付け | admin |
 | `/my-profile` | マイプロフィール — エンジニア自身の情報・スキル・担当案件表示 | engineer |
 
 ### DBスキーマ（主要テーブル）
@@ -206,6 +207,7 @@ GMAIL_CREDENTIALS_JSON= # 本番用: credentials.jsonの内容を文字列で設
 DATABASE_URL=            # 空ならSQLite、設定するとPostgreSQL
 AUTH_ENABLED=false       # 本番: true
 SUPABASE_URL=            # https://xxx.supabase.co（ES256 JWKS検証用）
+SUPABASE_SERVICE_ROLE_KEY= # Supabase Service Roleキー（ユーザー作成・削除・PW変更に必要）
 SUPABASE_JWT_SECRET=     # フォールバック用HS256シークレット
 CORS_ORIGINS=http://localhost:3000
 CRON_SECRET=             # GitHub Actions認証用
