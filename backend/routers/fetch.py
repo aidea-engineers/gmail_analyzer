@@ -4,12 +4,13 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
+import time
 import uuid
 from typing import Optional
 
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
 from core.auth import CurrentUser, require_admin
@@ -43,6 +44,51 @@ _job_progress: dict[str, dict] = {}
 # 重複実行防止用ロック
 _pipeline_lock = threading.Lock()
 _running_job_id: Optional[str] = None
+
+# レートリミット用（認証不要エンドポイント向け）
+_rate_limit_store: dict[str, list[float]] = {}
+_RATE_LIMIT_WINDOW = 60  # 秒
+_RATE_LIMIT_MAX = 10     # ウィンドウあたりの最大リクエスト数
+
+
+def _check_rate_limit(client_ip: str) -> bool:
+    """IPベースの簡易レートリミット。制限超過時はFalseを返す。"""
+    now = time.time()
+    timestamps = _rate_limit_store.get(client_ip, [])
+    # ウィンドウ外のタイムスタンプを除去
+    timestamps = [t for t in timestamps if now - t < _RATE_LIMIT_WINDOW]
+    if len(timestamps) >= _RATE_LIMIT_MAX:
+        _rate_limit_store[client_ip] = timestamps
+        return False
+    timestamps.append(now)
+    _rate_limit_store[client_ip] = timestamps
+    return True
+
+
+@router.get("/cron-status")
+def cron_status(request: Request):
+    """認証不要のステータスエンドポイント（cron keep-alive用）。
+    返す情報は未処理件数と案件総数のみ（機密情報なし）。"""
+    client_ip = request.client.host if request.client else "unknown"
+    if not _check_rate_limit(client_ip):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded")
+
+    with get_connection() as conn:
+        total_emails = conn.execute(
+            "SELECT COUNT(*) as cnt FROM emails"
+        ).fetchone()["cnt"]
+        processed_emails = conn.execute(
+            "SELECT COUNT(*) as cnt FROM emails WHERE is_processed = TRUE"
+        ).fetchone()["cnt"]
+        unprocessed_emails = total_emails - processed_emails
+        total_listings = conn.execute(
+            "SELECT COUNT(*) as cnt FROM job_listings"
+        ).fetchone()["cnt"]
+
+    return {
+        "unprocessed_emails": unprocessed_emails,
+        "total_listings": total_listings,
+    }
 
 
 @router.get("/status")

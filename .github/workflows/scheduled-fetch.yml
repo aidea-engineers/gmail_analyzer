@@ -15,7 +15,7 @@ jobs:
         run: |
           echo "Waking up Render server..."
           curl -sf -o /dev/null -w "%{http_code}" \
-            https://gmail-analyzer-api.onrender.com/api/fetch/status \
+            https://gmail-analyzer-api.onrender.com/api/health \
             || true
           echo ""
           echo "Waiting 60s for server to be ready..."
@@ -56,7 +56,7 @@ jobs:
 
             # ステータスをチェック（ping兼用でRenderを起こし続ける）
             STATUS=$(curl -sf --max-time 10 \
-              https://gmail-analyzer-api.onrender.com/api/fetch/status 2>/dev/null || echo "")
+              https://gmail-analyzer-api.onrender.com/api/fetch/cron-status 2>/dev/null || echo "")
 
             if [ -z "$STATUS" ]; then
               echo "[$ELAPSED s] Server not responding, retrying..."
