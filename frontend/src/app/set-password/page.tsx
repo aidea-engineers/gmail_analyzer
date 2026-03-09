@@ -1,11 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
 export default function SetPasswordPage() {
-  const router = useRouter();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
@@ -64,9 +63,6 @@ export default function SetPasswordPage() {
       }
 
       setSuccess(true);
-      setTimeout(() => {
-        router.push("/my-profile");
-      }, 2000);
     } catch {
       setError("パスワード設定に失敗しました");
       setLoading(false);
@@ -97,10 +93,23 @@ export default function SetPasswordPage() {
         </div>
 
         {success ? (
-          <div className="text-center space-y-4">
-            <div className="p-3 rounded-lg bg-green-50 text-green-700 text-sm">
-              パスワードを設定しました。プロフィール画面に移動します...
+          <div className="text-center space-y-5">
+            <div className="p-4 rounded-lg bg-green-50 text-green-700 text-sm">
+              <p className="font-semibold text-base mb-2">ログインが完了しました</p>
+              <p className="mb-3">
+                次回以降はログイン画面からメールアドレスとパスワードでログインできます。
+              </p>
+              <p className="text-xs" style={{ color: "var(--muted)" }}>
+                ログインURL: <span className="font-mono">gmail-analyzer-nu.vercel.app</span>
+              </p>
             </div>
+            <Link
+              href="/my-profile"
+              className="block w-full py-3 rounded-lg text-sm font-medium text-white text-center transition-colors"
+              style={{ background: "var(--primary)" }}
+            >
+              プロフィールを入力する
+            </Link>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">

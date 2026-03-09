@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/components/AuthProvider";
-import { getEngineerDetail, updateEngineer, changeMyPassword } from "@/lib/api";
-import type { EngineerDetail, EngineerForm } from "@/types";
+import { getEngineerDetail, updateEngineer, changeMyPassword, getSelfProfile, registerSelfProfile } from "@/lib/api";
+import type { EngineerDetail, EngineerForm, CareerEntry } from "@/types";
 import {
   EMPTY_FORM,
   SKILL_CATEGORY_COLORS,
@@ -219,9 +219,10 @@ export default function MyProfilePage() {
         <h1 className="text-2xl font-bold mb-4" style={{ color: "var(--foreground)" }}>
           マイプロフィール
         </h1>
-        <p style={{ color: "var(--muted)" }}>
-          エンジニア情報がまだ登録されていません。管理者にお問い合わせください。
-        </p>
+        <SelfRegistrationForm
+          userEmail={user?.email || ""}
+          onRegistered={() => window.location.reload()}
+        />
         {/* PW変更はエンジニア紐付けがなくても可能 */}
         <PasswordSection
           newPassword={newPassword}
@@ -728,6 +729,607 @@ export default function MyProfilePage() {
         error=""
         success=""
       />
+    </div>
+  );
+}
+
+/* --- 自己登録フォーム --- */
+
+const EMPTY_CAREER: CareerEntry = {
+  company_name: "",
+  job_title: "",
+  period_start: "",
+  period_end: "",
+  description: "",
+};
+
+const GENDER_OPTIONS = ["男性", "女性", "その他", "未回答"];
+
+const POPULAR_SKILLS = [
+  "Java", "Python", "JavaScript", "TypeScript", "React", "AWS", "Docker",
+  "Go", "PHP", "Ruby", "Vue.js", "Angular", "Next.js", "Spring Boot",
+  "PostgreSQL", "MySQL", "Linux", "Kubernetes",
+];
+
+function SelfRegistrationForm({
+  userEmail,
+  onRegistered,
+}: {
+  userEmail: string;
+  onRegistered: () => void;
+}) {
+  const [form, setForm] = useState<EngineerForm>({ ...EMPTY_FORM, email: userEmail });
+  const [gender, setGender] = useState("");
+  const [skillEntries, setSkillEntries] = useState<{ name: string; years: string }[]>([
+    { name: "", years: "" },
+  ]);
+  const [careers, setCareers] = useState<CareerEntry[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [regError, setRegError] = useState("");
+  const [regSuccess, setRegSuccess] = useState("");
+
+  // スキルカテゴリ折りたたみ
+  const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({});
+
+  const addSkillEntry = () => setSkillEntries((p) => [...p, { name: "", years: "" }]);
+  const removeSkillEntry = (i: number) => setSkillEntries((p) => p.filter((_, idx) => idx !== i));
+  const updateSkillEntry = (i: number, field: "name" | "years", value: string) => {
+    setSkillEntries((p) => p.map((e, idx) => (idx === i ? { ...e, [field]: value } : e)));
+  };
+
+  const addQuickSkill = (skill: string) => {
+    // Add to checkbox skills if it's in the checkbox list, otherwise add as entry
+    if (ALL_CHECKBOX_SKILLS.includes(skill)) {
+      if (!form.skills.includes(skill)) {
+        setForm((p) => ({ ...p, skills: [...p.skills, skill] }));
+      }
+    } else {
+      if (!skillEntries.some((e) => e.name === skill)) {
+        setSkillEntries((p) => [...p, { name: skill, years: "" }]);
+      }
+    }
+  };
+
+  const addCareer = () => setCareers((p) => [...p, { ...EMPTY_CAREER }]);
+  const removeCareer = (i: number) => setCareers((p) => p.filter((_, idx) => idx !== i));
+  const updateCareer = (i: number, field: keyof CareerEntry, value: string) => {
+    setCareers((p) => p.map((c, idx) => (idx === i ? { ...c, [field]: value } : c)));
+  };
+
+  const toggleSkill = (skill: string) => {
+    setForm((prev) => {
+      const has = prev.skills.includes(skill);
+      const skills = has ? prev.skills.filter((s) => s !== skill) : [...prev.skills, skill];
+      const proficiency = { ...prev.skill_proficiency };
+      if (has) delete proficiency[skill];
+      return { ...prev, skills, skill_proficiency: proficiency };
+    });
+  };
+
+  const toggleArrayField = (field: keyof EngineerForm, value: string) => {
+    setForm((prev) => {
+      const arr = prev[field] as string[];
+      const has = arr.includes(value);
+      return { ...prev, [field]: has ? arr.filter((v) => v !== value) : [...arr, value] };
+    });
+  };
+
+  const handleSubmit = async () => {
+    if (!form.name.trim()) {
+      setRegError("氏名は必須です");
+      return;
+    }
+    setSaving(true);
+    setRegError("");
+    setRegSuccess("");
+
+    try {
+      // Combine checkbox skills + manual skill entries
+      const allSkills = [...form.skills];
+      const otherSkillNames: string[] = [];
+      skillEntries.forEach((e) => {
+        const name = e.name.trim();
+        if (name && !allSkills.includes(name)) {
+          allSkills.push(name);
+          otherSkillNames.push(name);
+        }
+      });
+      if (form.skills_other.trim()) {
+        form.skills_other.split(/[;；]/).forEach((s) => {
+          const trimmed = s.trim();
+          if (trimmed && !allSkills.includes(trimmed)) {
+            allSkills.push(trimmed);
+            otherSkillNames.push(trimmed);
+          }
+        });
+      }
+
+      // Build skill_proficiency with years from manual entries
+      const proficiency: Record<string, string> = { ...form.skill_proficiency };
+      skillEntries.forEach((e) => {
+        if (e.name.trim() && e.years.trim()) {
+          proficiency[e.name.trim()] = `${e.years}年`;
+        }
+      });
+
+      // Combine areas
+      const allAreas = [...form.preferred_areas];
+      if (form.preferred_areas_other.trim()) {
+        form.preferred_areas_other.split(/[,，]/).forEach((a) => {
+          const trimmed = a.trim();
+          if (trimmed && !allAreas.includes(trimmed)) allAreas.push(trimmed);
+        });
+      }
+
+      const payload: Record<string, unknown> = {
+        name: form.name,
+        name_kana: form.name_kana || null,
+        email: form.email || null,
+        phone: form.phone || null,
+        gender: gender || null,
+        skills: allSkills,
+        processes: form.processes.join(","),
+        remote_preference: form.remote_preference,
+        preferred_areas: allAreas.join(","),
+        desired_price_min: form.desired_price_min ? parseInt(form.desired_price_min) : null,
+        desired_price_max: form.desired_price_max ? parseInt(form.desired_price_max) : null,
+        certifications: form.certifications,
+        career_desired_job_type: form.career_desired_job_type.join(","),
+        career_desired_skills: form.career_desired_skills,
+        career_notes: form.career_notes,
+        skill_proficiency: JSON.stringify(proficiency),
+        notes: form.notes,
+      };
+
+      // Add career entries as notes supplement if present
+      if (careers.length > 0) {
+        const careerText = careers
+          .filter((c) => c.company_name.trim())
+          .map((c) => `${c.company_name} / ${c.job_title} (${c.period_start}〜${c.period_end})\n${c.description}`)
+          .join("\n---\n");
+        if (careerText) {
+          payload.notes = (form.notes ? form.notes + "\n\n--- 職歴 ---\n" : "--- 職歴 ---\n") + careerText;
+        }
+      }
+
+      await registerSelfProfile(payload);
+      setRegSuccess("プロフィールを登録しました。");
+      setTimeout(() => onRegistered(), 1000);
+    } catch (e: unknown) {
+      setRegError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputStyle = {
+    background: "var(--background)",
+    border: "1px solid var(--border)",
+    color: "var(--foreground)",
+  };
+
+  return (
+    <div
+      className="rounded-xl p-6 space-y-6"
+      style={{ background: "var(--card-bg)", border: "1px solid var(--border)" }}
+    >
+      <div className="p-4 rounded-lg bg-blue-50 text-blue-700 text-sm">
+        プロフィール情報を登録してください。登録後、管理者がアカウントとエンジニア情報を紐付けます。
+      </div>
+
+      {regError && <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm">{regError}</div>}
+      {regSuccess && <div className="p-3 rounded-lg bg-green-50 text-green-700 text-sm">{regSuccess}</div>}
+
+      {/* 基本情報 */}
+      <Section title="基本情報">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>
+              氏名 <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg text-sm"
+              style={inputStyle}
+              placeholder="例: 山田 太郎"
+            />
+          </div>
+          <div>
+            <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>フリガナ</label>
+            <input
+              type="text"
+              value={form.name_kana}
+              onChange={(e) => setForm({ ...form, name_kana: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg text-sm"
+              style={inputStyle}
+              placeholder="例: ヤマダ タロウ"
+            />
+          </div>
+          <div>
+            <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>メールアドレス</label>
+            <input
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg text-sm"
+              style={inputStyle}
+            />
+          </div>
+          <div>
+            <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>電話番号</label>
+            <input
+              type="tel"
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg text-sm"
+              style={inputStyle}
+              placeholder="例: 090-1234-5678"
+            />
+          </div>
+          <div>
+            <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>性別</label>
+            <select
+              value={gender}
+              onChange={(e) => setGender(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg text-sm"
+              style={inputStyle}
+            >
+              <option value="">未選択</option>
+              {GENDER_OPTIONS.map((g) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </Section>
+
+      {/* スキル */}
+      <Section title="スキル">
+        {/* Quick-add chips */}
+        <div className="mb-4">
+          <label className="text-xs block mb-2" style={{ color: "var(--muted)" }}>よく使われるスキル（クリックで追加）</label>
+          <div className="flex flex-wrap gap-2">
+            {POPULAR_SKILLS.map((skill) => {
+              const isSelected = form.skills.includes(skill) || skillEntries.some((e) => e.name === skill);
+              return (
+                <button
+                  key={skill}
+                  type="button"
+                  onClick={() => addQuickSkill(skill)}
+                  className="px-3 py-1 rounded-full text-xs transition-colors"
+                  style={{
+                    background: isSelected ? "var(--primary)" : "var(--background)",
+                    color: isSelected ? "white" : "var(--foreground)",
+                    border: "1px solid var(--border)",
+                    opacity: isSelected ? 0.6 : 1,
+                  }}
+                  disabled={isSelected}
+                >
+                  {skill}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Checkbox skills by category */}
+        {SKILL_CATEGORY_ORDER.filter((cat) => cat !== "その他").map((cat) => (
+          <div key={cat} className="mb-3">
+            <button
+              type="button"
+              onClick={() => setOpenCategories((p) => ({ ...p, [cat]: !p[cat] }))}
+              className="text-sm font-medium mb-1 flex items-center gap-1"
+              style={{ color: "var(--foreground)" }}
+            >
+              <span className={`px-1.5 py-0.5 rounded text-xs ${SKILL_CATEGORY_COLORS[cat]}`}>{cat}</span>
+              <span className="text-xs" style={{ color: "var(--muted)" }}>
+                {openCategories[cat] ? "▼" : "▶"}
+              </span>
+            </button>
+            {(openCategories[cat] ?? false) && (
+              <div className="flex flex-wrap gap-2 mt-1">
+                {SKILL_CHECKBOXES[cat].map((skill) => {
+                  const checked = form.skills.includes(skill);
+                  return (
+                    <label key={skill} className="flex items-center gap-1 text-xs" style={{ color: "var(--foreground)" }}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleSkill(skill)}
+                        className="rounded"
+                      />
+                      {skill}
+                      {checked && (
+                        <select
+                          value={form.skill_proficiency[skill] || ""}
+                          onChange={(e) =>
+                            setForm((p) => ({
+                              ...p,
+                              skill_proficiency: { ...p.skill_proficiency, [skill]: e.target.value },
+                            }))
+                          }
+                          className="ml-1 px-1 py-0.5 rounded text-xs"
+                          style={inputStyle}
+                        >
+                          <option value="">-</option>
+                          {PROFICIENCY_OPTIONS.map((l) => (
+                            <option key={l} value={l}>{l}</option>
+                          ))}
+                        </select>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ))}
+
+        {/* Manual skill entries with years */}
+        <div className="mt-4">
+          <label className="text-xs block mb-2" style={{ color: "var(--muted)" }}>
+            その他スキル（名前と経験年数）
+          </label>
+          {skillEntries.map((entry, i) => (
+            <div key={i} className="flex gap-2 mb-2 items-center">
+              <input
+                type="text"
+                value={entry.name}
+                onChange={(e) => updateSkillEntry(i, "name", e.target.value)}
+                className="flex-1 px-3 py-2 rounded-lg text-sm"
+                style={inputStyle}
+                placeholder="スキル名"
+              />
+              <input
+                type="number"
+                value={entry.years}
+                onChange={(e) => updateSkillEntry(i, "years", e.target.value)}
+                className="w-20 px-3 py-2 rounded-lg text-sm"
+                style={inputStyle}
+                placeholder="年数"
+                min="0"
+              />
+              <span className="text-xs" style={{ color: "var(--muted)" }}>年</span>
+              {skillEntries.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removeSkillEntry(i)}
+                  className="text-red-500 text-xs px-2 py-1 rounded hover:bg-red-50"
+                >
+                  削除
+                </button>
+              )}
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={addSkillEntry}
+            className="text-xs px-3 py-1.5 rounded-lg"
+            style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--primary)" }}
+          >
+            + スキルを追加
+          </button>
+        </div>
+      </Section>
+
+      {/* 勤務条件 */}
+      <Section title="勤務条件">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>希望単価（下限・万円）</label>
+            <input
+              type="number"
+              value={form.desired_price_min}
+              onChange={(e) => setForm({ ...form, desired_price_min: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg text-sm"
+              style={inputStyle}
+              placeholder="例: 50"
+              min="0"
+            />
+          </div>
+          <div>
+            <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>希望単価（上限・万円）</label>
+            <input
+              type="number"
+              value={form.desired_price_max}
+              onChange={(e) => setForm({ ...form, desired_price_max: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg text-sm"
+              style={inputStyle}
+              placeholder="例: 70"
+              min="0"
+            />
+          </div>
+        </div>
+
+        <CheckboxGroup
+          label="希望エリア"
+          options={AREA_OPTIONS}
+          selected={form.preferred_areas}
+          onChange={(v) => toggleArrayField("preferred_areas", v)}
+        />
+        <div className="mb-4">
+          <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>その他勤務地</label>
+          <input
+            type="text"
+            value={form.preferred_areas_other}
+            onChange={(e) => setForm({ ...form, preferred_areas_other: e.target.value })}
+            className="w-full px-3 py-2 rounded-lg text-sm"
+            style={inputStyle}
+            placeholder="カンマ区切り"
+          />
+        </div>
+
+        <CheckboxGroup
+          label="対応工程"
+          options={PROCESS_OPTIONS}
+          selected={form.processes}
+          onChange={(v) => toggleArrayField("processes", v)}
+        />
+
+        <div className="mb-4">
+          <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>リモート希望</label>
+          <div className="flex gap-3 flex-wrap">
+            {["フルリモート", "一部リモート", "オフィス", "どちらでも"].map((opt) => (
+              <label key={opt} className="flex items-center gap-1 text-xs" style={{ color: "var(--foreground)" }}>
+                <input
+                  type="radio"
+                  name="reg_remote"
+                  value={opt}
+                  checked={form.remote_preference === opt}
+                  onChange={(e) => setForm({ ...form, remote_preference: e.target.value })}
+                />
+                {opt}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>資格</label>
+          <input
+            type="text"
+            value={form.certifications}
+            onChange={(e) => setForm({ ...form, certifications: e.target.value })}
+            className="w-full px-3 py-2 rounded-lg text-sm"
+            style={inputStyle}
+            placeholder="例: AWS SAA, 基本情報技術者"
+          />
+        </div>
+      </Section>
+
+      {/* 職歴 */}
+      <Section title="職歴">
+        {careers.length === 0 && (
+          <p className="text-xs mb-3" style={{ color: "var(--muted)" }}>
+            職歴を追加してください（任意）
+          </p>
+        )}
+        {careers.map((c, i) => (
+          <div
+            key={i}
+            className="p-4 rounded-lg mb-3 space-y-3"
+            style={{ background: "var(--background)", border: "1px solid var(--border)" }}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium" style={{ color: "var(--foreground)" }}>職歴 {i + 1}</span>
+              <button
+                type="button"
+                onClick={() => removeCareer(i)}
+                className="text-red-500 text-xs px-2 py-1 rounded hover:bg-red-50"
+              >
+                削除
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>会社名</label>
+                <input
+                  type="text"
+                  value={c.company_name}
+                  onChange={(e) => updateCareer(i, "company_name", e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg text-sm"
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>職種</label>
+                <input
+                  type="text"
+                  value={c.job_title}
+                  onChange={(e) => updateCareer(i, "job_title", e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg text-sm"
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>期間（開始）</label>
+                <input
+                  type="month"
+                  value={c.period_start}
+                  onChange={(e) => updateCareer(i, "period_start", e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg text-sm"
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>期間（終了）</label>
+                <input
+                  type="month"
+                  value={c.period_end}
+                  onChange={(e) => updateCareer(i, "period_end", e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg text-sm"
+                  style={inputStyle}
+                  placeholder="現在の場合は空欄"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>業務内容</label>
+              <textarea
+                value={c.description}
+                onChange={(e) => updateCareer(i, "description", e.target.value)}
+                rows={2}
+                className="w-full px-3 py-2 rounded-lg text-sm"
+                style={inputStyle}
+              />
+            </div>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={addCareer}
+          className="text-xs px-3 py-1.5 rounded-lg"
+          style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--primary)" }}
+        >
+          + 職歴を追加
+        </button>
+      </Section>
+
+      {/* キャリア希望 */}
+      <Section title="今後のキャリア">
+        <CheckboxGroup
+          label="希望職種"
+          options={JOB_TYPE_OPTIONS}
+          selected={form.career_desired_job_type}
+          onChange={(v) => toggleArrayField("career_desired_job_type", v)}
+        />
+        <div className="mb-3">
+          <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>習得したいスキル</label>
+          <input
+            type="text"
+            value={form.career_desired_skills}
+            onChange={(e) => setForm({ ...form, career_desired_skills: e.target.value })}
+            className="w-full px-3 py-2 rounded-lg text-sm"
+            style={inputStyle}
+            placeholder="例: Kubernetes, 機械学習"
+          />
+        </div>
+        <div>
+          <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>キャリアメモ</label>
+          <textarea
+            value={form.career_notes}
+            onChange={(e) => setForm({ ...form, career_notes: e.target.value })}
+            rows={3}
+            className="w-full px-3 py-2 rounded-lg text-sm"
+            style={inputStyle}
+            placeholder="キャリアに関するご希望やメモをご自由に"
+          />
+        </div>
+      </Section>
+
+      {/* 送信ボタン */}
+      <div className="pt-2">
+        <button
+          onClick={handleSubmit}
+          disabled={saving}
+          className="w-full py-3 rounded-lg text-sm font-medium text-white disabled:opacity-50 transition-colors"
+          style={{ background: "var(--primary)" }}
+        >
+          {saving ? "登録中..." : "プロフィールを登録する"}
+        </button>
+      </div>
     </div>
   );
 }

@@ -134,6 +134,36 @@ class EngineerUpdate(BaseModel):
     fairgrit_user_id: Optional[str] = None
 
 
+class CareerEntry(BaseModel):
+    """職歴エントリ"""
+    company_name: str = Field("", description="会社名")
+    job_title: str = Field("", description="職種")
+    period_start: str = Field("", description="開始時期")
+    period_end: str = Field("", description="終了時期")
+    description: str = Field("", description="業務内容")
+
+
+class EngineerSelfRegister(BaseModel):
+    """エンジニア自己登録リクエスト"""
+    name: str = Field(..., description="氏名（必須）")
+    name_kana: str = Field("", description="フリガナ")
+    email: str = Field("", description="メールアドレス")
+    phone: str = Field("", description="電話番号")
+    gender: str = Field("", description="性別")
+    skills: list[str] = Field(default_factory=list, description="スキル一覧")
+    skill_years: dict[str, int] = Field(default_factory=dict, description="スキル年数 {スキル名: 年数}")
+    desired_price_min: Optional[int] = Field(None, description="希望単価下限")
+    desired_price_max: Optional[int] = Field(None, description="希望単価上限")
+    preferred_areas: str = Field("", description="希望エリア")
+    processes: str = Field("", description="対応工程")
+    remote_preference: str = Field("", description="リモート希望")
+    certifications: str = Field("", description="資格")
+    career_desired_job_type: str = Field("", description="希望職種")
+    career_desired_skills: str = Field("", description="習得したいスキル")
+    career_notes: str = Field("", description="キャリアメモ")
+    careers: list[CareerEntry] = Field(default_factory=list, description="職歴")
+
+
 class AssignmentCreate(BaseModel):
     """アサイン履歴追加リクエスト"""
     listing_id: Optional[int] = Field(None, description="案件ID（任意）")

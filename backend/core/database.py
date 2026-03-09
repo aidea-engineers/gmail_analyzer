@@ -195,13 +195,28 @@ CREATE TABLE IF NOT EXISTS engineers (
 CREATE TABLE IF NOT EXISTS engineer_skills (
     id              SERIAL PRIMARY KEY,
     engineer_id     INTEGER NOT NULL REFERENCES engineers(id) ON DELETE CASCADE,
-    skill_name      TEXT NOT NULL
+    skill_name      TEXT NOT NULL,
+    years           INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_eng_skills_name
     ON engineer_skills(skill_name);
 CREATE INDEX IF NOT EXISTS idx_eng_skills_engineer
     ON engineer_skills(engineer_id);
+
+CREATE TABLE IF NOT EXISTS engineer_careers (
+    id              SERIAL PRIMARY KEY,
+    engineer_id     INTEGER NOT NULL REFERENCES engineers(id) ON DELETE CASCADE,
+    company_name    TEXT NOT NULL DEFAULT '',
+    job_title       TEXT NOT NULL DEFAULT '',
+    period_start    TEXT DEFAULT '',
+    period_end      TEXT DEFAULT '',
+    description     TEXT DEFAULT '',
+    created_at      TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_engineer_careers_engineer_id
+    ON engineer_careers(engineer_id);
 
 CREATE TABLE IF NOT EXISTS engineer_assignments (
     id              SERIAL PRIMARY KEY,
@@ -405,6 +420,7 @@ CREATE TABLE IF NOT EXISTS engineer_skills (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     engineer_id     INTEGER NOT NULL,
     skill_name      TEXT NOT NULL,
+    years           INTEGER,
     FOREIGN KEY (engineer_id) REFERENCES engineers(id) ON DELETE CASCADE
 );
 
@@ -412,6 +428,21 @@ CREATE INDEX IF NOT EXISTS idx_eng_skills_name
     ON engineer_skills(skill_name);
 CREATE INDEX IF NOT EXISTS idx_eng_skills_engineer
     ON engineer_skills(engineer_id);
+
+CREATE TABLE IF NOT EXISTS engineer_careers (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    engineer_id     INTEGER NOT NULL,
+    company_name    TEXT NOT NULL DEFAULT '',
+    job_title       TEXT NOT NULL DEFAULT '',
+    period_start    TEXT DEFAULT '',
+    period_end      TEXT DEFAULT '',
+    description     TEXT DEFAULT '',
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (engineer_id) REFERENCES engineers(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_engineer_careers_engineer_id
+    ON engineer_careers(engineer_id);
 
 CREATE TABLE IF NOT EXISTS engineer_assignments (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -582,6 +613,19 @@ MIGRATIONS = [
     )"""),
     (37, "idx_invite_logs_user_id", "CREATE INDEX IF NOT EXISTS idx_invite_logs_user_id ON invite_logs(user_id)"),
     (38, "idx_invite_logs_email", "CREATE INDEX IF NOT EXISTS idx_invite_logs_email ON invite_logs(email)"),
+    # --- エンジニア自己登録: 職歴テーブル + スキル年数 ---
+    (39, "engineer_careers", """CREATE TABLE IF NOT EXISTS engineer_careers (
+        id SERIAL PRIMARY KEY,
+        engineer_id INTEGER NOT NULL REFERENCES engineers(id) ON DELETE CASCADE,
+        company_name TEXT NOT NULL DEFAULT '',
+        job_title TEXT NOT NULL DEFAULT '',
+        period_start TEXT DEFAULT '',
+        period_end TEXT DEFAULT '',
+        description TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )"""),
+    (40, "idx_engineer_careers_engineer_id", "CREATE INDEX IF NOT EXISTS idx_engineer_careers_engineer_id ON engineer_careers(engineer_id)"),
+    (41, "engineer_skills.years", "ALTER TABLE engineer_skills ADD COLUMN years INTEGER"),
 ]
 
 
@@ -1324,11 +1368,13 @@ def insert_engineer(data: dict) -> int:
             cursor = conn.execute(sql, params)
             eng_id = cursor.lastrowid
 
+        skill_years = data.get("skill_years", {})
         for skill in data.get("skills", []):
             if skill.strip():
+                years = skill_years.get(skill.strip())
                 conn.execute(
-                    "INSERT INTO engineer_skills (engineer_id, skill_name) VALUES (?, ?)",
-                    (eng_id, skill.strip()),
+                    "INSERT INTO engineer_skills (engineer_id, skill_name, years) VALUES (?, ?, ?)",
+                    (eng_id, skill.strip(), years),
                 )
         return eng_id
 
@@ -1390,11 +1436,13 @@ def update_engineer(eng_id: int, data: dict) -> bool:
             conn.execute(
                 "DELETE FROM engineer_skills WHERE engineer_id = ?", (eng_id,)
             )
+            skill_years = data.get("skill_years", {})
             for skill in data["skills"]:
                 if skill.strip():
+                    years = skill_years.get(skill.strip())
                     conn.execute(
-                        "INSERT INTO engineer_skills (engineer_id, skill_name) VALUES (?, ?)",
-                        (eng_id, skill.strip()),
+                        "INSERT INTO engineer_skills (engineer_id, skill_name, years) VALUES (?, ?, ?)",
+                        (eng_id, skill.strip(), years),
                     )
         return True
 
@@ -1417,10 +1465,18 @@ def get_engineer(eng_id: int) -> Optional[dict]:
         eng = dict(row)
 
         skills = conn.execute(
-            "SELECT skill_name FROM engineer_skills WHERE engineer_id = ? ORDER BY skill_name",
+            "SELECT skill_name, years FROM engineer_skills WHERE engineer_id = ? ORDER BY skill_name",
             (eng_id,),
         ).fetchall()
         eng["skills"] = [s["skill_name"] for s in skills]
+        eng["skill_years"] = {s["skill_name"]: s["years"] for s in skills if s["years"] is not None}
+
+        # 職歴
+        careers = conn.execute(
+            "SELECT id, company_name, job_title, period_start, period_end, description FROM engineer_careers WHERE engineer_id = ? ORDER BY period_start DESC",
+            (eng_id,),
+        ).fetchall()
+        eng["careers"] = [dict(c) for c in careers]
 
         assignments = conn.execute(
             """SELECT ea.*, jl.work_area as listing_area
@@ -1433,6 +1489,58 @@ def get_engineer(eng_id: int) -> Optional[dict]:
         eng["assignments"] = [dict(a) for a in assignments]
 
         return eng
+
+
+def create_engineer_self(user_id: str, data: dict) -> dict:
+    """エンジニアが自分のプロフィールを自己登録する。engineersテーブルにレコード作成 + user_profilesのengineer_idを自動紐付け。"""
+    # Check if already linked
+    with get_connection() as conn:
+        profile = conn.execute("SELECT engineer_id FROM user_profiles WHERE id = ?", (user_id,)).fetchone()
+        if profile and profile["engineer_id"]:
+            raise ValueError("既にエンジニア情報が登録されています")
+
+    # Check if engineer with same email exists (admin pre-created)
+    email = data.get("email", "")
+    if email:
+        with get_connection() as conn:
+            existing = conn.execute("SELECT id FROM engineers WHERE email = ?", (email,)).fetchone()
+            if existing:
+                eng_id = existing["id"]
+                conn.execute("UPDATE user_profiles SET engineer_id = ? WHERE id = ?", (eng_id, user_id))
+                conn.commit()
+                update_engineer(eng_id, data)
+                return get_engineer(eng_id)
+
+    # Create new engineer record
+    eng_id = insert_engineer(data)
+
+    # Link to user_profiles
+    with get_connection() as conn:
+        conn.execute("UPDATE user_profiles SET engineer_id = ? WHERE id = ?", (eng_id, user_id))
+        conn.commit()
+    return get_engineer(eng_id)
+
+
+def save_engineer_careers(engineer_id: int, careers: list[dict]) -> None:
+    """エンジニアの職歴を保存する（全削除→再挿入）。"""
+    with get_connection() as conn:
+        conn.execute("DELETE FROM engineer_careers WHERE engineer_id = ?", (engineer_id,))
+        for c in careers:
+            conn.execute(
+                "INSERT INTO engineer_careers (engineer_id, company_name, job_title, period_start, period_end, description) VALUES (?, ?, ?, ?, ?, ?)",
+                (engineer_id, c.get("company_name", ""), c.get("job_title", ""), c.get("period_start", ""), c.get("period_end", ""), c.get("description", "")),
+            )
+        conn.commit()
+
+
+def get_engineer_careers(engineer_id: int) -> list[dict]:
+    """エンジニアの職歴一覧を返す。"""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT id, company_name, job_title, period_start, period_end, description FROM engineer_careers WHERE engineer_id = ? ORDER BY period_start DESC",
+            (engineer_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
 
 def search_engineers(

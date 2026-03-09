@@ -169,6 +169,15 @@ export interface Engineer {
   updated_at: string;
 }
 
+export interface CareerEntry {
+  id?: number;
+  company_name: string;
+  job_title: string;
+  period_start: string;
+  period_end: string;
+  description: string;
+}
+
 export interface EngineerDetail extends Engineer {
   assignments: EngineerAssignment[];
 }

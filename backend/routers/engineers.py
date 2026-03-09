@@ -25,7 +25,7 @@ from core.database import (
     insert_assignment,
     delete_assignment,
 )
-from models.schemas import EngineerCreate, EngineerUpdate, AssignmentCreate
+from models.schemas import EngineerCreate, EngineerUpdate, AssignmentCreate, EngineerSelfRegister
 from utils.text_helpers import (
     normalize_skill_name, categorize_skills, PROCESS_OPTIONS,
     JOB_TYPE_OPTIONS, POSITION_OPTIONS, REMOTE_OPTIONS, AREA_OPTIONS,
@@ -297,6 +297,43 @@ async def engineer_import_csv(file: UploadFile = File(...), user: CurrentUser = 
             errors.append(f"{i}行目: {name} のインポートに失敗 ({e})")
 
     return {"imported": imported, "errors": errors}
+
+
+@router.get("/self")
+async def get_self_profile(user: CurrentUser = Depends(require_auth)):
+    """自分のエンジニア情報を取得する（紐付けなしならnullを返す）。"""
+    if not user.engineer_id:
+        return {"engineer": None}
+    from core.database import get_engineer_careers
+    eng = get_engineer(user.engineer_id)
+    if eng:
+        eng["careers"] = get_engineer_careers(user.engineer_id)
+    return {"engineer": eng}
+
+
+@router.post("/self")
+async def register_self(
+    body: EngineerSelfRegister,
+    user: CurrentUser = Depends(require_auth),
+):
+    """エンジニアが自分のプロフィールを自己登録する（engineer_idが未紐付けの場合のみ）。"""
+    if user.engineer_id:
+        raise HTTPException(status_code=409, detail="既にエンジニア情報が登録されています")
+
+    data = body.model_dump()
+    careers = data.pop("careers", [])
+    skill_years = data.pop("skill_years", {})
+    data["skill_years"] = skill_years  # pass to create_engineer
+
+    try:
+        from core.database import create_engineer_self, save_engineer_careers, get_engineer_careers
+        engineer = create_engineer_self(user.id, data)
+        if careers:
+            save_engineer_careers(engineer["id"], [c if isinstance(c, dict) else c.model_dump() for c in careers])
+            engineer["careers"] = get_engineer_careers(engineer["id"])
+        return {"message": "プロフィールを登録しました", "engineer": engineer}
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
 
 # --- 個別リソースのエンドポイント ---

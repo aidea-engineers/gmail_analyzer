@@ -147,6 +147,18 @@ export function getEngineerDetail(id: number) {
   return fetchAPI<import("@/types").EngineerDetail>(`/api/engineers/${id}`);
 }
 
+export function getSelfProfile() {
+  return fetchAPI<{ engineer: import("@/types").EngineerDetail | null }>("/api/engineers/self");
+}
+
+export function registerSelfProfile(data: Record<string, unknown>) {
+  return fetchAPI<{ message: string; engineer: import("@/types").EngineerDetail }>("/api/engineers/self", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
 export function createEngineer(data: Record<string, unknown>) {
   return fetchAPI<{ id: number; message: string }>("/api/engineers", {
     method: "POST",
