@@ -4,6 +4,11 @@ import type { EngineerForm } from "@/types";
 
 export const EMPTY_FORM: EngineerForm = {
   name: "",
+  name_kana: "",
+  email: "",
+  phone: "",
+  address: "",
+  nearest_station: "",
   skills: [],
   skills_other: "",
   experience_years: "",

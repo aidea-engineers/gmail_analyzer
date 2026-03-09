@@ -103,6 +103,11 @@ class EngineerCreate(BaseModel):
 class EngineerUpdate(BaseModel):
     """エンジニア更新リクエスト（部分更新可）"""
     name: Optional[str] = None
+    name_kana: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    nearest_station: Optional[str] = None
     skills: Optional[list[str]] = None
     experience_years: Optional[int] = None
     current_price: Optional[int] = None

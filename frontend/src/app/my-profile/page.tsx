@@ -76,6 +76,11 @@ export default function MyProfilePage() {
 
     setForm({
       name: engineer.name,
+      name_kana: engineer.name_kana || "",
+      email: engineer.email || "",
+      phone: engineer.phone || "",
+      address: engineer.address || "",
+      nearest_station: engineer.nearest_station || "",
       skills: checkboxSkills,
       skills_other: otherSkills.join("; "),
       experience_years: engineer.experience_years?.toString() || "",
@@ -129,6 +134,12 @@ export default function MyProfilePage() {
       }
 
       const payload: Record<string, unknown> = {
+        name: form.name,
+        name_kana: form.name_kana || null,
+        email: form.email || null,
+        phone: form.phone || null,
+        address: form.address || null,
+        nearest_station: form.nearest_station || null,
         skills: allSkills,
         processes: form.processes.join(","),
         job_type_experience: form.job_type_experience.join(","),
@@ -256,20 +267,76 @@ export default function MyProfilePage() {
           style={{ background: "var(--card-bg)", border: "1px solid var(--border)" }}
         >
           {/* 管理者設定項目（表示のみ） */}
-          <Section title="基本情報（管理者設定）">
+          <Section title="管理者設定（変更は管理者にお問い合わせください）">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <ReadOnlyField label="名前" value={engineer.name} />
               <ReadOnlyField label="ステータス" value={engineer.status} />
               <ReadOnlyField label="経験年数" value={engineer.experience_years ? `${engineer.experience_years}年` : "-"} />
-              <ReadOnlyField label="現在単価" value={engineer.current_price ? `${engineer.current_price}万円` : "-"} />
-              <ReadOnlyField label="希望単価(下限)" value={engineer.desired_price_min ? `${engineer.desired_price_min}万円` : "-"} />
-              <ReadOnlyField label="希望単価(上限)" value={engineer.desired_price_max ? `${engineer.desired_price_max}万円` : "-"} />
             </div>
           </Section>
 
-          {/* 個人情報 */}
-          <Section title="個人情報">
+          {/* 基本情報 */}
+          <Section title="基本情報">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>名前</label>
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg text-sm"
+                  style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}
+                />
+              </div>
+              <div>
+                <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>名前（カナ）</label>
+                <input
+                  type="text"
+                  value={form.name_kana || ""}
+                  onChange={(e) => setForm({ ...form, name_kana: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg text-sm"
+                  style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}
+                />
+              </div>
+              <div>
+                <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>メールアドレス</label>
+                <input
+                  type="email"
+                  value={form.email || ""}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg text-sm"
+                  style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}
+                />
+              </div>
+              <div>
+                <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>電話番号</label>
+                <input
+                  type="tel"
+                  value={form.phone || ""}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg text-sm"
+                  style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}
+                />
+              </div>
+              <div>
+                <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>住所</label>
+                <input
+                  type="text"
+                  value={form.address || ""}
+                  onChange={(e) => setForm({ ...form, address: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg text-sm"
+                  style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}
+                />
+              </div>
+              <div>
+                <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>最寄駅</label>
+                <input
+                  type="text"
+                  value={form.nearest_station || ""}
+                  onChange={(e) => setForm({ ...form, nearest_station: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg text-sm"
+                  style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}
+                />
+              </div>
               <div>
                 <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>稼働可能日</label>
                 <input
@@ -535,18 +602,17 @@ export default function MyProfilePage() {
           <Section title="基本情報">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <InfoField label="名前" value={engineer.name} />
+              <InfoField label="名前（カナ）" value={engineer.name_kana} />
+              <InfoField label="メール" value={engineer.email} />
+              <InfoField label="電話番号" value={engineer.phone} />
+              <InfoField label="住所" value={engineer.address} />
+              <InfoField label="最寄駅" value={engineer.nearest_station} />
               <InfoField label="ステータス">
                 <span className={`px-2 py-0.5 rounded text-xs ${STATUS_COLORS[engineer.status] || ""}`}>
                   {engineer.status}
                 </span>
               </InfoField>
               <InfoField label="経験年数" value={engineer.experience_years ? `${engineer.experience_years}年` : ""} />
-              <InfoField label="現在単価" value={engineer.current_price ? `${engineer.current_price}万円` : ""} />
-              <InfoField label="希望単価" value={
-                engineer.desired_price_min || engineer.desired_price_max
-                  ? `${engineer.desired_price_min || "?"}〜${engineer.desired_price_max || "?"}万円`
-                  : ""
-              } />
               <InfoField label="稼働可能日" value={engineer.available_from} />
               <InfoField label="生年月日" value={engineer.birth_date} />
               <InfoField label="最終学歴" value={engineer.education} />

@@ -188,6 +188,11 @@ export default function EngineersPage() {
       : [];
     setForm({
       name: eng.name,
+      name_kana: eng.name_kana || "",
+      email: eng.email || "",
+      phone: eng.phone || "",
+      address: eng.address || "",
+      nearest_station: eng.nearest_station || "",
       skills: knownSkills,
       skills_other: otherSkills.join("; "),
       experience_years: eng.experience_years?.toString() ?? "",

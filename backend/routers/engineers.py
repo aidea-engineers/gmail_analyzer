@@ -336,7 +336,12 @@ def get_engineer_detail(eng_id: int, user: CurrentUser = Depends(require_auth)):
 
 
 # エンジニア本人が編集不可のフィールド（管理者のみ変更可）
-_ADMIN_ONLY_FIELDS = {"name", "status", "current_price", "desired_price_min", "desired_price_max", "experience_years"}
+_ADMIN_ONLY_FIELDS = {
+    "current_price", "desired_price_min", "desired_price_max",  # 単価
+    "status",                                                    # ステータス
+    "office_branch", "department",                               # 所属
+    "fairgrit_user_id",                                          # 管理ID
+}
 
 
 @router.put("/{eng_id}")
@@ -345,9 +350,14 @@ def update_engineer_api(eng_id: int, body: EngineerUpdate, user: CurrentUser = D
     if not user.is_admin and user.engineer_id != eng_id:
         raise HTTPException(status_code=403, detail="自分の情報のみ更新できます")
     data = {k: v for k, v in body.model_dump().items() if v is not None}
-    # エンジニア本人の更新時は管理者専用フィールドを除外
+    # エンジニア本人の更新時は管理者専用フィールドを拒否
     if not user.is_admin:
-        data = {k: v for k, v in data.items() if k not in _ADMIN_ONLY_FIELDS}
+        forbidden = set(data.keys()) & _ADMIN_ONLY_FIELDS
+        if forbidden:
+            raise HTTPException(
+                status_code=422,
+                detail=f"以下のフィールドは管理者のみ変更できます: {', '.join(sorted(forbidden))}",
+            )
     if not data:
         raise HTTPException(status_code=400, detail="更新するフィールドがありません")
     # スキル正規化

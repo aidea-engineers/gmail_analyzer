@@ -138,6 +138,11 @@ export type CategorizedSkills = Record<string, string[]>;
 export interface Engineer {
   id: number;
   name: string;
+  name_kana: string;
+  email: string;
+  phone: string;
+  address: string;
+  nearest_station: string;
   experience_years: number | null;
   current_price: number | null;
   desired_price_min: number | null;
@@ -212,6 +217,11 @@ export interface EngineersResponse {
 
 export interface EngineerForm {
   name: string;
+  name_kana: string;
+  email: string;
+  phone: string;
+  address: string;
+  nearest_station: string;
   skills: string[];
   skills_other: string;
   experience_years: string;
