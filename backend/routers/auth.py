@@ -127,7 +127,7 @@ async def invite_user(
         raise HTTPException(status_code=409, detail="このメールアドレスは既に登録されています")
 
     # リダイレクト先を許可ドメインに固定
-    frontend_url = os.getenv("FRONTEND_URL", "https://gmail-analyzer-nu.vercel.app")
+    frontend_url = os.getenv("FRONTEND_URL", "https://gmail-analyzer-nu.vercel.app").strip()
     redirect_to = f"{frontend_url}/set-password"
 
     try:
@@ -180,7 +180,7 @@ async def reinvite_user(
         logger.warning("再招待時のAuth削除失敗（続行）: %s", e)
 
     # 2. 再招待（新しいAuthユーザー作成 + メール送信）
-    frontend_url = os.getenv("FRONTEND_URL", "https://gmail-analyzer-nu.vercel.app")
+    frontend_url = os.getenv("FRONTEND_URL", "https://gmail-analyzer-nu.vercel.app").strip().strip()
     redirect_to = f"{frontend_url}/set-password"
 
     try:
