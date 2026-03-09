@@ -129,6 +129,9 @@ class EngineerUpdate(BaseModel):
     industry_experience: Optional[str] = None
     skill_proficiency: Optional[str] = None
     certifications: Optional[str] = None
+    office_branch: Optional[str] = None
+    department: Optional[str] = None
+    fairgrit_user_id: Optional[str] = None
 
 
 class AssignmentCreate(BaseModel):

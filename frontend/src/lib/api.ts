@@ -331,6 +331,7 @@ export function resetUserPassword(userId: string, newPassword: string) {
 
 export function inviteUser(data: {
   email: string;
+  role?: string;
   engineer_id?: number | null;
   display_name?: string;
 }) {

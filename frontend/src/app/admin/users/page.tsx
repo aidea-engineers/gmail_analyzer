@@ -44,6 +44,7 @@ export default function AdminUsersPage() {
   const [showInvite, setShowInvite] = useState(false);
   const [inviteForm, setInviteForm] = useState({
     email: "",
+    role: "engineer",
     engineer_id: "" as string,
     display_name: "",
   });
@@ -167,11 +168,12 @@ export default function AdminUsersPage() {
     try {
       await inviteUser({
         email: inviteForm.email,
+        role: inviteForm.role,
         engineer_id: inviteForm.engineer_id ? Number(inviteForm.engineer_id) : null,
         display_name: inviteForm.display_name,
       });
       setSuccess("招待メールを送信しました");
-      setInviteForm({ email: "", engineer_id: "", display_name: "" });
+      setInviteForm({ email: "", role: "engineer", engineer_id: "", display_name: "" });
       setShowInvite(false);
       await load();
     } catch (e: unknown) {
@@ -183,10 +185,11 @@ export default function AdminUsersPage() {
 
   const handleReinvite = async (u: UserProfile) => {
     clearMessages();
-    if (!confirm(`${u.email} に招待メールを再送しますか？`)) return;
+    if (!confirm(`${u.email} に招待メールを再送しますか？\n（Auth側のユーザーを再作成して招待メールを送り直します）`)) return;
     try {
       await reinviteUser(u.id);
       setSuccess("招待メールを再送しました");
+      await load();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -255,6 +258,20 @@ export default function AdminUsersPage() {
                 className="w-full px-3 py-2 rounded-lg text-sm"
                 style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}
               />
+            </div>
+            <div>
+              <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>
+                ロール
+              </label>
+              <select
+                value={inviteForm.role}
+                onChange={(e) => setInviteForm({ ...inviteForm, role: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg text-sm"
+                style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}
+              >
+                <option value="engineer">エンジニア</option>
+                <option value="admin">管理者</option>
+              </select>
             </div>
             <div>
               <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>

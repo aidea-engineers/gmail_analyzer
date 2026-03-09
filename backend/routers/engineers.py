@@ -349,7 +349,7 @@ def update_engineer_api(eng_id: int, body: EngineerUpdate, user: CurrentUser = D
     """エンジニア更新。エンジニアは自分の情報のみ更新可。"""
     if not user.is_admin and user.engineer_id != eng_id:
         raise HTTPException(status_code=403, detail="自分の情報のみ更新できます")
-    data = {k: v for k, v in body.model_dump().items() if v is not None}
+    data = {k: v for k, v in body.model_dump(exclude_unset=True).items()}
     # エンジニア本人の更新時は管理者専用フィールドを拒否
     if not user.is_admin:
         forbidden = set(data.keys()) & _ADMIN_ONLY_FIELDS

@@ -40,6 +40,7 @@ class UserProfileCreate(BaseModel):
 
 class InviteRequest(BaseModel):
     email: str
+    role: str = "engineer"
     engineer_id: Optional[int] = None
     display_name: str = ""
 
@@ -134,11 +135,12 @@ async def invite_user(
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # user_profiles に保存（ロールはengineer固定）
+    # user_profiles に保存
+    role = body.role if body.role in ("admin", "engineer") else "engineer"
     profile = upsert_user_profile(
         user_id=auth_uid,
         email=body.email,
-        role="engineer",
+        role=role,
         engineer_id=body.engineer_id,
         display_name=body.display_name,
     )
@@ -159,7 +161,11 @@ async def reinvite_user(
     user_id: str,
     user: CurrentUser = Depends(require_admin),
 ):
-    """招待メールを再送する（管理者のみ）。"""
+    """招待メールを再送する（管理者のみ）。
+
+    GoTrue の /invite は既存ユーザーに使えないため、
+    Auth側のユーザーを削除→再招待→user_profilesのIDを更新する。
+    """
     existing = get_user_profile(user_id)
     if not existing:
         raise HTTPException(status_code=404, detail="ユーザーが見つかりません")
@@ -167,23 +173,41 @@ async def reinvite_user(
     if not supabase_admin.is_configured():
         raise HTTPException(status_code=400, detail="Supabase Admin APIが未設定です")
 
+    # 1. Supabase Auth から既存ユーザーを削除（パスワード未設定なので安全）
+    try:
+        await supabase_admin.delete_user(user_id)
+    except RuntimeError as e:
+        logger.warning("再招待時のAuth削除失敗（続行）: %s", e)
+
+    # 2. 再招待（新しいAuthユーザー作成 + メール送信）
     frontend_url = os.getenv("FRONTEND_URL", "https://gmail-analyzer-nu.vercel.app")
     redirect_to = f"{frontend_url}/set-password"
 
     try:
-        await supabase_admin.invite_user(existing["email"], redirect_to=redirect_to)
+        new_auth_uid = await supabase_admin.invite_user(existing["email"], redirect_to=redirect_to)
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    # 3. user_profilesのIDを新しいAuth UIDに更新
+    from core.database import delete_user_profile
+    delete_user_profile(user_id)
+    new_profile = upsert_user_profile(
+        user_id=new_auth_uid,
+        email=existing["email"],
+        role=existing.get("role", "engineer"),
+        engineer_id=existing.get("engineer_id"),
+        display_name=existing.get("display_name", ""),
+    )
 
     # 再招待履歴を記録
     from core.database import create_invite_log
     create_invite_log(
-        user_id=user_id,
+        user_id=new_auth_uid,
         email=existing["email"],
         invited_by=user.id,
     )
 
-    return {"message": "招待メールを再送しました"}
+    return {"message": "招待メールを再送しました", "profile": new_profile}
 
 
 @router.put("/users/{user_id}")
