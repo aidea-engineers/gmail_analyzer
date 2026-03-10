@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import { supabase } from "@/lib/supabase";
 import { getEngineerDetail, updateEngineer, changeMyPassword, getSelfProfile, registerSelfProfile } from "@/lib/api";
 import type { EngineerDetail, EngineerForm, CareerEntry } from "@/types";
 import {
@@ -731,6 +732,39 @@ function SelfRegistrationForm({
   userEmail: string;
   onRegistered: () => void;
 }) {
+  // ステップ管理: "password" → "profile"
+  const [step, setStep] = useState<"password" | "profile">("password");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [pwLoading, setPwLoading] = useState(false);
+  const [pwError, setPwError] = useState("");
+
+  const handleSetPassword = async () => {
+    setPwError("");
+    if (password.length < 8) {
+      setPwError("パスワードは8文字以上で入力してください");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setPwError("パスワードが一致しません");
+      return;
+    }
+    setPwLoading(true);
+    try {
+      if (!supabase) throw new Error("認証システムが設定されていません");
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) {
+        setPwError(error.message);
+        return;
+      }
+      setStep("profile");
+    } catch {
+      setPwError("パスワード設定に失敗しました");
+    } finally {
+      setPwLoading(false);
+    }
+  };
+
   const [form, setForm] = useState<EngineerForm>({ ...EMPTY_FORM, email: userEmail });
   const [gender, setGender] = useState("");
   const [skillEntries, setSkillEntries] = useState<{ name: string; years: string }[]>([
@@ -820,10 +854,10 @@ function SelfRegistrationForm({
 
       const payload: Record<string, unknown> = {
         name: form.name,
-        name_kana: form.name_kana || null,
-        email: form.email || null,
-        phone: form.phone || null,
-        gender: gender || null,
+        name_kana: form.name_kana || "",
+        email: form.email || "",
+        phone: form.phone || "",
+        gender: gender || "",
         skills: allSkills,
         processes: form.processes.join(","),
         remote_preference: form.remote_preference,
@@ -871,6 +905,67 @@ function SelfRegistrationForm({
     color: "var(--foreground)",
   };
 
+  // ステップ1: パスワード設定
+  if (step === "password") {
+    return (
+      <div
+        className="rounded-xl p-6 space-y-6 max-w-md mx-auto"
+        style={{ background: "var(--card-bg)", border: "1px solid var(--border)" }}
+      >
+        <div className="text-center">
+          <h2 className="text-lg font-bold mb-2" style={{ color: "var(--foreground)" }}>
+            パスワード設定
+          </h2>
+          <p className="text-sm" style={{ color: "var(--muted)" }}>
+            ログイン用のパスワードを設定してください。次回以降はメールアドレスとパスワードでログインできます。
+          </p>
+        </div>
+
+        {pwError && <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm">{pwError}</div>}
+
+        <div>
+          <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>新しいパスワード</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg text-sm"
+            style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}
+            placeholder="8文字以上"
+            minLength={8}
+          />
+        </div>
+        <div>
+          <label className="text-xs block mb-1" style={{ color: "var(--muted)" }}>パスワード確認</label>
+          <input
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg text-sm"
+            style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}
+            placeholder="もう一度入力"
+          />
+        </div>
+        <button
+          onClick={handleSetPassword}
+          disabled={pwLoading}
+          className="w-full py-3 rounded-lg text-sm font-medium text-white disabled:opacity-50 transition-colors"
+          style={{ background: pwLoading ? "#6b7280" : "var(--primary)" }}
+        >
+          {pwLoading ? "設定中..." : "パスワードを設定して次へ"}
+        </button>
+        <button
+          onClick={() => setStep("profile")}
+          className="w-full text-xs py-2"
+          style={{ color: "var(--muted)" }}
+        >
+          パスワード設定済みの方はスキップ
+        </button>
+      </div>
+    );
+  }
+
+  // ステップ2: プロフィール登録
   return (
     <div
       className="rounded-xl p-6 space-y-6"
