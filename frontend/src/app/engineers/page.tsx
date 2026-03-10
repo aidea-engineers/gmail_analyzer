@@ -10,6 +10,7 @@ import {
   createEngineer,
   updateEngineer,
   deleteEngineer,
+  bulkDeleteEngineers,
   getEngineerExportURL,
   importEngineersCsv,
   createAssignment,
@@ -64,6 +65,10 @@ export default function EngineersPage() {
   const [form, setForm] = useState<EngineerForm>({ ...EMPTY_FORM });
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // 一括選択
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // CSVインポート
   const [showImport, setShowImport] = useState(false);
@@ -289,9 +294,45 @@ export default function EngineersPage() {
     try {
       await deleteEngineer(id);
       setExpandedId(null);
+      setSelectedIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
       reload();
     } catch (e) {
       setError((e as Error).message);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`${selectedIds.size}名のエンジニアを削除しますか？\nスキル・職歴・担当案件・マッチング提案も削除されます。`)) return;
+    setBulkDeleting(true);
+    setError("");
+    try {
+      const result = await bulkDeleteEngineers(Array.from(selectedIds));
+      setSelectedIds(new Set());
+      setExpandedId(null);
+      reload();
+      setError(""); // clear any previous error
+      alert(result.message);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === engineers.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(engineers.map((e) => e.id)));
     }
   };
 
@@ -685,21 +726,19 @@ export default function EngineersPage() {
                             {sk}
                           </label>
                           {form.skills.includes(sk) && (
-                            <select
-                              value={form.skill_proficiency[sk] || ""}
+                            <input
+                              type="number"
+                              value={form.skill_proficiency[sk]?.replace(/年$/, "") || ""}
                               onChange={(e) => {
                                 const prof = { ...form.skill_proficiency };
-                                if (e.target.value) { prof[sk] = e.target.value; } else { delete prof[sk]; }
+                                if (e.target.value) { prof[sk] = `${e.target.value}年`; } else { delete prof[sk]; }
                                 setForm({ ...form, skill_proficiency: prof });
                               }}
-                              className="px-1 py-0 border rounded text-xs text-slate-600"
-                              style={{ borderColor: "var(--border)", fontSize: "10px" }}
-                            >
-                              <option value="">-</option>
-                              {(filters?.proficiency_options ?? ["初級", "中級", "上級"]).map((lv) => (
-                                <option key={lv} value={lv}>{lv}</option>
-                              ))}
-                            </select>
+                              className="ml-1 w-12 px-1 py-0.5 rounded text-xs text-center"
+                              style={{ borderColor: "var(--border)", border: "1px solid var(--border)", fontSize: "10px" }}
+                              placeholder="年"
+                              min="0"
+                            />
                           )}
                         </span>
                       ))}
@@ -881,11 +920,39 @@ export default function EngineersPage() {
             </div>
           ) : (
             <div className="space-y-2">
+              {/* 一括操作バー */}
+              {selectedIds.size > 0 && (
+                <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-blue-50 border border-blue-200">
+                  <span className="text-sm text-blue-700 font-medium">{selectedIds.size}名を選択中</span>
+                  <button
+                    onClick={handleBulkDelete}
+                    disabled={bulkDeleting}
+                    className="px-3 py-1 bg-red-500 text-white text-xs rounded-lg hover:bg-red-600 disabled:opacity-50 transition-colors"
+                  >
+                    {bulkDeleting ? "削除中..." : "一括削除"}
+                  </button>
+                  <button
+                    onClick={() => setSelectedIds(new Set())}
+                    className="px-3 py-1 bg-gray-200 text-gray-600 text-xs rounded-lg hover:bg-gray-300 transition-colors"
+                  >
+                    選択解除
+                  </button>
+                </div>
+              )}
+
               {/* テーブルヘッダー */}
               <div
-                className="grid grid-cols-[1fr_80px_1fr_80px_120px_100px] gap-2 px-4 py-2 text-xs font-semibold text-slate-500 border-b"
+                className="grid grid-cols-[32px_1fr_80px_1fr_80px_120px_100px] gap-2 px-4 py-2 text-xs font-semibold text-slate-500 border-b"
                 style={{ borderColor: "var(--border)" }}
               >
+                <span>
+                  <input
+                    type="checkbox"
+                    checked={engineers.length > 0 && selectedIds.size === engineers.length}
+                    onChange={toggleSelectAll}
+                    className="rounded"
+                  />
+                </span>
                 <span>名前</span>
                 <span>ステータス</span>
                 <span>スキル</span>
@@ -898,14 +965,22 @@ export default function EngineersPage() {
               {engineers.map((eng) => (
                 <div key={eng.id}>
                   <div
-                    className="grid grid-cols-[1fr_80px_1fr_80px_120px_100px] gap-2 px-4 py-3 rounded-lg border cursor-pointer hover:bg-slate-50 transition-colors"
+                    className="grid grid-cols-[32px_1fr_80px_1fr_80px_120px_100px] gap-2 px-4 py-3 rounded-lg border cursor-pointer hover:bg-slate-50 transition-colors"
                     style={{
-                      background: "var(--card-bg)",
+                      background: selectedIds.has(eng.id) ? "rgba(59,130,246,0.05)" : "var(--card-bg)",
                       borderColor:
-                        expandedId === eng.id ? "var(--primary)" : "var(--border)",
+                        expandedId === eng.id ? "var(--primary)" : selectedIds.has(eng.id) ? "rgb(147,197,253)" : "var(--border)",
                     }}
                     onClick={() => handleExpand(eng.id)}
                   >
+                    <span onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(eng.id)}
+                        onChange={() => toggleSelect(eng.id)}
+                        className="rounded"
+                      />
+                    </span>
                     <span className="text-sm font-medium truncate">{eng.name}</span>
                     <span>
                       <span

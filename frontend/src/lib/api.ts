@@ -183,6 +183,14 @@ export function deleteEngineer(id: number) {
   });
 }
 
+export function bulkDeleteEngineers(ids: number[]) {
+  return fetchAPI<{ message: string; deleted: number }>("/api/engineers/bulk-delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+}
+
 export function getEngineerExportURL(params: Record<string, string>) {
   const qs = new URLSearchParams(params).toString();
   return `${API_BASE}/api/engineers/export?${qs}`;

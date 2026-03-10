@@ -38,6 +38,33 @@
 
 ---
 
+## 進行中タスク（2026-03-10）
+
+### エンジニア招待フロー改善
+- **PW設定をmy-profile内に統合**: set-passwordページ依存をやめ、SelfRegistrationForm内で2ステップ化（PW設定→プロフィール入力）
+- **set-passwordページ**: my-profileへのリダイレクトに変更
+- **sessionStorageでステップ永続化**: supabase.auth.updateUserによる再レンダリングでリセットされるバグ対策
+- **テスト状況**: Supabaseレートリミット（1時間3通）に引っかかり、フルフロー再テスト待ち
+
+### スキルUI改善（全画面共通）
+- 「言語」→「WEB」名称変更
+- 「ネットワーク」カテゴリ追加（Cisco, CCNA, CCNP, Juniper, Fortinet, Palo Alto, F5, VMware NSX, Aruba, Wireshark）
+- 「よく使われるスキル」欄削除（自己登録フォーム）
+- カテゴリ折りたたみ廃止（常に展開）
+- スキル習熟度: 初級/中級/上級 → 年数入力に変更（my-profile + engineers管理画面）
+- バックエンド（text_helpers.py）のカテゴリ分類も同期更新済み
+
+### エンジニア一括削除機能（実装中）
+- バックエンド: POST /api/engineers/bulk-delete エンドポイント追加
+- フロント: チェックボックス + 全選択 + 一括削除ボタン（これから実装）
+- CASCADE削除（skills, careers, assignments, proposals自動削除、user_profilesはSET NULL）
+
+### バグ修正
+- プロフィール登録時「object」エラー表示 → api.tsでdetailオブジェクト対応
+- phoneフィールドnullバリデーションエラー → 空文字列送信に修正
+
+---
+
 ## 完了済みタスク（2026-03-08）
 
 ### 会社名修正

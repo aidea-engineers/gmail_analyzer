@@ -406,6 +406,21 @@ def update_engineer_api(eng_id: int, body: EngineerUpdate, user: CurrentUser = D
     return {"message": "更新しました"}
 
 
+@router.post("/bulk-delete")
+def bulk_delete_engineers(body: dict, user: CurrentUser = Depends(require_admin)):
+    """エンジニア一括削除（管理者のみ）"""
+    ids = body.get("ids", [])
+    if not ids:
+        raise HTTPException(status_code=400, detail="削除対象が指定されていません")
+
+    deleted = 0
+    for eng_id in ids:
+        if delete_engineer(eng_id):
+            deleted += 1
+
+    return {"message": f"{deleted}件削除しました", "deleted": deleted}
+
+
 @router.delete("/{eng_id}")
 def delete_engineer_api(eng_id: int, user: CurrentUser = Depends(require_admin)):
     """エンジニア削除"""
