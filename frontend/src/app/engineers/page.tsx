@@ -922,7 +922,7 @@ export default function EngineersPage() {
             <div className="space-y-2">
               {/* 一括操作バー */}
               {selectedIds.size > 0 && (
-                <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-blue-50 border border-blue-200">
+                <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-blue-50 border border-blue-200 sticky top-0 z-10">
                   <span className="text-sm text-blue-700 font-medium">{selectedIds.size}名を選択中</span>
                   <button
                     onClick={handleBulkDelete}
