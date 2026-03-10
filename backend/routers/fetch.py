@@ -106,7 +106,7 @@ def cron_status(request: Request):
                 "fetched": log.get("emails_fetched", 0),
                 "processed": log.get("emails_processed", 0),
                 "error_count": len(err_list),
-                "last_error": err_list[-1][:100] if err_list else "",
+                "last_error": err_list[-1][:300] if err_list else "",
             })
 
     return {

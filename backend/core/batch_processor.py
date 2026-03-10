@@ -60,7 +60,8 @@ def run_extraction_only(
                 if extractions is None:
                     # API失敗時は未処理のまま残す（次回再試行可能）
                     result.api_errors += 1
-                    error_msg = f"メールID {email_id}: AI解析失敗（API エラー）"
+                    last_err = getattr(extract_from_email, "_last_error", "")
+                    error_msg = f"メールID {email_id}: AI解析失敗（{last_err or 'API エラー'}）"
                     logger.warning(error_msg)
                     errors.append(error_msg)
                 else:

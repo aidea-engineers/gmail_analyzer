@@ -187,6 +187,8 @@ def extract_from_email(
                 continue
             else:
                 logger.error(f"Gemini API エラー: {e}")
+                # 最後のエラーを保存（診断用）
+                extract_from_email._last_error = str(e)[:200]
                 if attempt < max_retries - 1:
                     time.sleep(1)
                     continue
@@ -194,3 +196,5 @@ def extract_from_email(
 
     logger.error("最大リトライ回数に達しました")
     return None
+
+extract_from_email._last_error = ""
