@@ -732,8 +732,13 @@ function SelfRegistrationForm({
   userEmail: string;
   onRegistered: () => void;
 }) {
-  // ステップ管理: "password" → "profile"
-  const [step, setStep] = useState<"password" | "profile">("password");
+  // ステップ管理: "password" → "profile"（sessionStorageで永続化）
+  const [step, setStep] = useState<"password" | "profile">(() => {
+    if (typeof window !== "undefined" && sessionStorage.getItem("aidea_pw_set") === "true") {
+      return "profile";
+    }
+    return "password";
+  });
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [pwLoading, setPwLoading] = useState(false);
@@ -757,6 +762,7 @@ function SelfRegistrationForm({
         setPwError(error.message);
         return;
       }
+      sessionStorage.setItem("aidea_pw_set", "true");
       setStep("profile");
     } catch {
       setPwError("パスワード設定に失敗しました");
@@ -885,6 +891,7 @@ function SelfRegistrationForm({
 
       await registerSelfProfile(payload);
       setRegSuccess("プロフィールを登録しました。");
+      sessionStorage.removeItem("aidea_pw_set");
       setTimeout(() => onRegistered(), 1000);
     } catch (e: unknown) {
       if (e instanceof Error) {
@@ -955,7 +962,7 @@ function SelfRegistrationForm({
           {pwLoading ? "設定中..." : "パスワードを設定して次へ"}
         </button>
         <button
-          onClick={() => setStep("profile")}
+          onClick={() => { sessionStorage.setItem("aidea_pw_set", "true"); setStep("profile"); }}
           className="w-full text-xs py-2"
           style={{ color: "var(--muted)" }}
         >
