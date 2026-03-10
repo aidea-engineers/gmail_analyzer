@@ -85,9 +85,34 @@ def cron_status(request: Request):
             "SELECT COUNT(*) as cnt FROM job_listings"
         ).fetchone()["cnt"]
 
+        # 直近のfetch_logサマリー（診断用）
+        recent_logs = conn.execute(
+            "SELECT started_at, status, emails_fetched, emails_processed, errors FROM fetch_log ORDER BY id DESC LIMIT 3"
+        ).fetchall()
+        logs_summary = []
+        for log in recent_logs:
+            log = dict(log)
+            errors_raw = log.get("errors", "[]")
+            if isinstance(errors_raw, str):
+                try:
+                    err_list = json.loads(errors_raw)
+                except Exception:
+                    err_list = [errors_raw] if errors_raw else []
+            else:
+                err_list = errors_raw or []
+            logs_summary.append({
+                "started_at": str(log.get("started_at", "")),
+                "status": log.get("status", ""),
+                "fetched": log.get("emails_fetched", 0),
+                "processed": log.get("emails_processed", 0),
+                "error_count": len(err_list),
+                "last_error": err_list[-1][:100] if err_list else "",
+            })
+
     return {
         "unprocessed_emails": unprocessed_emails,
         "total_listings": total_listings,
+        "recent_logs": logs_summary,
     }
 
 
