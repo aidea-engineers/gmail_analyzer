@@ -12,6 +12,8 @@ export default function SearchPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
+  const [perPage] = useState(50);
 
   // フィルター状態
   const [keyword, setKeyword] = useState("");
@@ -54,14 +56,17 @@ export default function SearchPage() {
   const doSearch = useCallback(() => {
     setLoading(true);
     setError("");
-    getListings(buildParams())
+    const params = buildParams();
+    params.page = String(page);
+    params.per_page = String(perPage);
+    getListings(params)
       .then((res) => {
         setListings(res.listings);
         setTotal(res.total);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [buildParams]);
+  }, [buildParams, page, perPage]);
 
   useEffect(() => {
     doSearch();
@@ -86,7 +91,10 @@ export default function SearchPage() {
     setPriceMax("");
     setDateFrom("");
     setDateTo("");
+    setPage(1);
   };
+
+  const totalPages = Math.ceil(total / perPage);
 
   return (
     <div className="flex gap-6 h-[calc(100vh-3.5rem)]">
@@ -236,7 +244,9 @@ export default function SearchPage() {
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-xl font-bold">案件検索</h1>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-slate-500">検索結果: {total}件</span>
+            <span className="text-sm text-slate-500">
+              検索結果: {total}件{totalPages > 1 && ` (${page}/${totalPages}ページ)`}
+            </span>
             <a
               href={getExportURL(buildParams())}
               className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
@@ -373,6 +383,56 @@ export default function SearchPage() {
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {/* ページネーション */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2 mt-4 pb-4">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="px-3 py-1.5 rounded-lg text-sm disabled:opacity-30"
+              style={{ background: "var(--card-bg)", border: "1px solid var(--border)", color: "var(--foreground)" }}
+            >
+              前へ
+            </button>
+            {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+              let p: number;
+              if (totalPages <= 7) {
+                p = i + 1;
+              } else if (page <= 4) {
+                p = i + 1;
+              } else if (page >= totalPages - 3) {
+                p = totalPages - 6 + i;
+              } else {
+                p = page - 3 + i;
+              }
+              return (
+                <button
+                  key={p}
+                  onClick={() => setPage(p)}
+                  className={`px-3 py-1.5 rounded-lg text-sm ${
+                    page === p ? "text-white" : ""
+                  }`}
+                  style={{
+                    background: page === p ? "var(--primary)" : "var(--card-bg)",
+                    border: "1px solid var(--border)",
+                    color: page === p ? "white" : "var(--foreground)",
+                  }}
+                >
+                  {p}
+                </button>
+              );
+            })}
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="px-3 py-1.5 rounded-lg text-sm disabled:opacity-30"
+              style={{ background: "var(--card-bg)", border: "1px solid var(--border)", color: "var(--foreground)" }}
+            >
+              次へ
+            </button>
           </div>
         )}
       </div>

@@ -44,6 +44,8 @@ def search_listings_api(
     price_max: Optional[int] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    page: int = Query(1, ge=1, description="ページ番号"),
+    per_page: int = Query(50, ge=1, le=200, description="1ページあたりの件数"),
     user: CurrentUser = Depends(require_admin),
 ):
     skills_list = [s.strip() for s in skills.split(",") if s.strip()] if skills else None
@@ -51,7 +53,7 @@ def search_listings_api(
     types_list = [t.strip() for t in job_types.split(",") if t.strip()] if job_types else None
     companies_list = [c.strip() for c in companies.split(",") if c.strip()] if companies else None
 
-    results = search_listings(
+    results, total = search_listings(
         keyword=keyword,
         keyword_mode=keyword_mode,
         skills=skills_list,
@@ -62,6 +64,8 @@ def search_listings_api(
         price_max=price_max if price_max and price_max < 200 else None,
         date_from=date_from,
         date_to=f"{date_to} 23:59:59" if date_to else None,
+        limit=per_page,
+        offset=(page - 1) * per_page,
     )
 
     listings = []
@@ -94,7 +98,7 @@ def search_listings_api(
             "created_at": r.get("created_at", ""),
         })
 
-    return {"total": len(listings), "listings": listings}
+    return {"total": total, "page": page, "per_page": per_page, "listings": listings}
 
 
 @router.get("/export")
@@ -116,7 +120,7 @@ def export_csv(
     types_list = [t.strip() for t in job_types.split(",") if t.strip()] if job_types else None
     companies_list = [c.strip() for c in companies.split(",") if c.strip()] if companies else None
 
-    results = search_listings(
+    results, _ = search_listings(
         keyword=keyword,
         keyword_mode=keyword_mode,
         skills=skills_list,
@@ -127,6 +131,8 @@ def export_csv(
         price_max=price_max if price_max and price_max < 200 else None,
         date_from=date_from,
         date_to=f"{date_to} 23:59:59" if date_to else None,
+        limit=10000,
+        offset=0,
     )
 
     output = io.StringIO()

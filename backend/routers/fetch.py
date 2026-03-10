@@ -276,6 +276,14 @@ def _run_cron_pipeline_bg():
                 logger.info("Cron pipeline: cleared %d old email bodies", cleared)
         except Exception:
             logger.exception("Failed to clear old email bodies")
+
+        # キャッシュ無効化（新データ反映）
+        try:
+            from core.cache import invalidate
+            invalidate()
+            logger.info("Cron pipeline: cache invalidated")
+        except Exception:
+            logger.exception("Failed to invalidate cache")
     except Exception:
         logger.exception("Cron pipeline failed")
     finally:

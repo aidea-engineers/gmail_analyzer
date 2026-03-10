@@ -25,7 +25,7 @@ from core.database import (
     insert_assignment,
     delete_assignment,
 )
-from models.schemas import EngineerCreate, EngineerUpdate, AssignmentCreate, EngineerSelfRegister
+from models.schemas import EngineerCreate, EngineerUpdate, AssignmentCreate, EngineerSelfRegister, BulkDeleteRequest
 from utils.text_helpers import (
     normalize_skill_name, categorize_skills, PROCESS_OPTIONS,
     JOB_TYPE_OPTIONS, POSITION_OPTIONS, REMOTE_OPTIONS, AREA_OPTIONS,
@@ -407,11 +407,9 @@ def update_engineer_api(eng_id: int, body: EngineerUpdate, user: CurrentUser = D
 
 
 @router.post("/bulk-delete")
-def bulk_delete_engineers(body: dict, user: CurrentUser = Depends(require_admin)):
+def bulk_delete_engineers(body: BulkDeleteRequest, user: CurrentUser = Depends(require_admin)):
     """エンジニア一括削除（管理者のみ）"""
-    ids = body.get("ids", [])
-    if not ids:
-        raise HTTPException(status_code=400, detail="削除対象が指定されていません")
+    ids = body.ids
 
     deleted = 0
     for eng_id in ids:

@@ -20,8 +20,22 @@ _USE_PG = bool(_DATABASE_URL)
 if _USE_PG:
     import psycopg2
     import psycopg2.extras
+    import psycopg2.pool
 else:
     import sqlite3
+
+# --- Connection Pool (PostgreSQL only) ---
+_pg_pool: psycopg2.pool.ThreadedConnectionPool | None = None
+
+
+def _get_pg_pool() -> psycopg2.pool.ThreadedConnectionPool:
+    global _pg_pool
+    if _pg_pool is None or _pg_pool.closed:
+        _pg_pool = psycopg2.pool.ThreadedConnectionPool(
+            minconn=1, maxconn=5, dsn=_DATABASE_URL,
+        )
+        logger.info("PostgreSQL connection pool created (min=1, max=5)")
+    return _pg_pool
 
 
 class _DBWrapper:
@@ -32,9 +46,10 @@ class _DBWrapper:
     automatically converts ``?`` to ``%s``.
     """
 
-    def __init__(self, raw_conn, is_pg: bool):
+    def __init__(self, raw_conn, is_pg: bool, pool=None):
         self._conn = raw_conn
         self.is_pg = is_pg
+        self._pool = pool  # For returning connection to pool
 
     def execute(self, sql, params=None):
         if self.is_pg:
@@ -59,7 +74,10 @@ class _DBWrapper:
         self._conn.rollback()
 
     def close(self):
-        self._conn.close()
+        if self._pool is not None:
+            self._pool.putconn(self._conn)
+        else:
+            self._conn.close()
 
 
 def _ensure_db_dir():
@@ -70,8 +88,9 @@ def _ensure_db_dir():
 @contextmanager
 def get_connection():
     if _USE_PG:
-        raw = psycopg2.connect(_DATABASE_URL)
-        conn = _DBWrapper(raw, is_pg=True)
+        pool = _get_pg_pool()
+        raw = pool.getconn()
+        conn = _DBWrapper(raw, is_pg=True, pool=pool)
     else:
         _ensure_db_dir()
         raw = sqlite3.connect(str(Config.DB_PATH), timeout=30)
@@ -877,7 +896,9 @@ def search_listings(
     price_max: int | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
-) -> list[dict]:
+    limit: int = 100,
+    offset: int = 0,
+) -> tuple[list[dict], int]:
     query = """
         SELECT DISTINCT jl.*, e.subject, e.sender, e.received_at
         FROM job_listings jl
@@ -951,8 +972,14 @@ def search_listings(
     query += " ORDER BY jl.created_at DESC"
 
     with get_connection() as conn:
-        rows = conn.execute(query, params).fetchall()
-        return [dict(r) for r in rows]
+        # 総件数を取得
+        count_query = f"SELECT COUNT(*) as cnt FROM ({query}) sub"
+        total = conn.execute(count_query, params).fetchone()["cnt"]
+
+        # ページネーション
+        query += " LIMIT ? OFFSET ?"
+        rows = conn.execute(query, params + [limit, offset]).fetchall()
+        return [dict(r) for r in rows], total
 
 
 # --- Dashboard Aggregation ---
@@ -1047,8 +1074,9 @@ def get_trend_data(
 
 
 def get_total_stats(date_from: str = "", date_to: str = "") -> dict:
+    """KPI統計を1クエリで取得"""
     base_where = "WHERE 1=1"
-    params = []
+    params: list = []
     if date_from:
         base_where += " AND created_at >= ?"
         params.append(date_from)
@@ -1056,87 +1084,114 @@ def get_total_stats(date_from: str = "", date_to: str = "") -> dict:
         base_where += " AND created_at <= ?"
         params.append(date_to)
 
+    today = datetime.now().strftime("%Y-%m-%d")
+
     with get_connection() as conn:
-        total = conn.execute(
-            f"SELECT COUNT(*) as cnt FROM job_listings {base_where}", params
-        ).fetchone()["cnt"]
-
-        avg_price = conn.execute(
-            f"""SELECT AVG((COALESCE(unit_price_min,0) + COALESCE(unit_price_max,0)) / 2.0) as avg_price
-                FROM job_listings {base_where} AND unit_price_min IS NOT NULL""",
-            params,
-        ).fetchone()["avg_price"]
-
-        today = datetime.now().strftime("%Y-%m-%d")
         if conn.is_pg:
-            today_count = conn.execute(
-                "SELECT COUNT(*) as cnt FROM job_listings WHERE created_at::date = ?",
-                (today,),
-            ).fetchone()["cnt"]
+            today_expr = "created_at::date = ?"
         else:
-            today_count = conn.execute(
-                "SELECT COUNT(*) as cnt FROM job_listings WHERE date(created_at) = ?",
-                (today,),
-            ).fetchone()["cnt"]
+            today_expr = "date(created_at) = ?"
 
-        area_count = conn.execute(
-            f"SELECT COUNT(DISTINCT work_area) as cnt FROM job_listings {base_where} AND work_area != ''",
-            params,
-        ).fetchone()["cnt"]
+        query = f"""
+            SELECT
+                COUNT(*) as total,
+                AVG(CASE WHEN unit_price_min IS NOT NULL
+                    THEN (COALESCE(unit_price_min,0) + COALESCE(unit_price_max,0)) / 2.0
+                    ELSE NULL END) as avg_price,
+                COUNT(DISTINCT CASE WHEN work_area != '' THEN work_area ELSE NULL END) as area_count,
+                SUM(CASE WHEN {today_expr} THEN 1 ELSE 0 END) as today_count
+            FROM job_listings {base_where}
+        """
+        row = conn.execute(query, params + [today]).fetchone()
+        row = dict(row)
 
     return {
-        "total": total,
-        "avg_price": round(avg_price, 1) if avg_price else 0,
-        "today_count": today_count,
-        "area_count": area_count,
+        "total": row["total"] or 0,
+        "avg_price": round(float(row["avg_price"]), 1) if row["avg_price"] else 0,
+        "today_count": row["today_count"] or 0,
+        "area_count": row["area_count"] or 0,
     }
 
 
 def get_monthly_summary(months: int = 6) -> list[dict]:
-    """月別の案件サマリーを返す（直近N月分）"""
+    """月別の案件サマリーを返す（直近N月分）— 1クエリで完結"""
     with get_connection() as conn:
         if conn.is_pg:
             month_expr = "to_char(created_at, 'YYYY-MM')"
         else:
             month_expr = "strftime('%Y-%m', created_at)"
 
+        # メインの集計 + 最多エリアを1クエリで取得
         query = f"""
             SELECT
-                {month_expr} as month,
-                COUNT(*) as listing_count,
-                AVG(
-                    CASE WHEN unit_price_min IS NOT NULL AND unit_price_max IS NOT NULL
-                         THEN (unit_price_min + unit_price_max) / 2.0
-                         WHEN unit_price_min IS NOT NULL THEN unit_price_min
-                         WHEN unit_price_max IS NOT NULL THEN unit_price_max
-                         ELSE NULL END
-                ) as avg_price,
-                COUNT(DISTINCT CASE WHEN company_name != '' THEN company_name ELSE NULL END) as unique_companies
-            FROM job_listings
-            WHERE created_at IS NOT NULL
-            GROUP BY {month_expr}
-            ORDER BY month DESC
-            LIMIT ?
-        """
-        rows = [dict(r) for r in conn.execute(query, (months,)).fetchall()]
-
-        # 各月の最多エリアを取得
-        for row in rows:
-            area_query = f"""
-                SELECT work_area, COUNT(*) as cnt
+                m.month, m.listing_count, m.avg_price, m.unique_companies,
+                COALESCE(ta.work_area, '') as top_area
+            FROM (
+                SELECT
+                    {month_expr} as month,
+                    COUNT(*) as listing_count,
+                    AVG(
+                        CASE WHEN unit_price_min IS NOT NULL AND unit_price_max IS NOT NULL
+                             THEN (unit_price_min + unit_price_max) / 2.0
+                             WHEN unit_price_min IS NOT NULL THEN unit_price_min
+                             WHEN unit_price_max IS NOT NULL THEN unit_price_max
+                             ELSE NULL END
+                    ) as avg_price,
+                    COUNT(DISTINCT CASE WHEN company_name != '' THEN company_name ELSE NULL END) as unique_companies
                 FROM job_listings
-                WHERE {month_expr} = ? AND work_area != ''
+                WHERE created_at IS NOT NULL
+                GROUP BY {month_expr}
+                ORDER BY month DESC
+                LIMIT ?
+            ) m
+            LEFT JOIN LATERAL (
+                SELECT work_area
+                FROM job_listings
+                WHERE {month_expr} = m.month AND work_area != ''
                 GROUP BY work_area
-                ORDER BY cnt DESC
+                ORDER BY COUNT(*) DESC
                 LIMIT 1
+            ) ta ON true
+            ORDER BY m.month ASC
+        """
+
+        if conn.is_pg:
+            rows = [dict(r) for r in conn.execute(query, (months,)).fetchall()]
+        else:
+            # SQLiteはLATERAL JOINをサポートしない→フォールバック
+            main_query = f"""
+                SELECT
+                    {month_expr} as month,
+                    COUNT(*) as listing_count,
+                    AVG(
+                        CASE WHEN unit_price_min IS NOT NULL AND unit_price_max IS NOT NULL
+                             THEN (unit_price_min + unit_price_max) / 2.0
+                             WHEN unit_price_min IS NOT NULL THEN unit_price_min
+                             WHEN unit_price_max IS NOT NULL THEN unit_price_max
+                             ELSE NULL END
+                    ) as avg_price,
+                    COUNT(DISTINCT CASE WHEN company_name != '' THEN company_name ELSE NULL END) as unique_companies
+                FROM job_listings
+                WHERE created_at IS NOT NULL
+                GROUP BY {month_expr}
+                ORDER BY month DESC
+                LIMIT ?
             """
-            area_row = conn.execute(area_query, (row["month"],)).fetchone()
-            row["top_area"] = dict(area_row)["work_area"] if area_row else ""
+            rows = [dict(r) for r in conn.execute(main_query, (months,)).fetchall()]
+            for row in rows:
+                area_query = f"""
+                    SELECT work_area FROM job_listings
+                    WHERE {month_expr} = ? AND work_area != ''
+                    GROUP BY work_area ORDER BY COUNT(*) DESC LIMIT 1
+                """
+                area_row = conn.execute(area_query, (row["month"],)).fetchone()
+                row["top_area"] = dict(area_row)["work_area"] if area_row else ""
+            rows.reverse()
+
+        for row in rows:
             if row["avg_price"] is not None:
                 row["avg_price"] = round(float(row["avg_price"]), 1)
 
-        # 古い順に並べ替え
-        rows.reverse()
         return rows
 
 

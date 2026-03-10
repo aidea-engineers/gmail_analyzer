@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   getEngineerStats,
   getEngineerFilters,
@@ -37,6 +37,7 @@ import {
 
 export default function EngineersPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   // データ
   const [stats, setStats] = useState<EngineerStats | null>(null);
   const [filters, setFilters] = useState<EngineerFilters | null>(null);
@@ -123,6 +124,18 @@ export default function EngineersPage() {
   useEffect(() => {
     doSearch();
   }, [doSearch]);
+
+  // クエリパラメータ ?id=XX で自動展開
+  useEffect(() => {
+    const idParam = searchParams.get("id");
+    if (idParam && !loading && engineers.length > 0) {
+      const id = Number(idParam);
+      if (id && engineers.some((e) => e.id === id)) {
+        handleExpand(id);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, loading, engineers]);
 
   const reload = () => {
     doSearch();

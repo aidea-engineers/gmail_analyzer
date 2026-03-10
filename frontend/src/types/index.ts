@@ -65,6 +65,8 @@ export interface JobListing {
 
 export interface ListingsResponse {
   total: number;
+  page: number;
+  per_page: number;
   listings: JobListing[];
 }
 

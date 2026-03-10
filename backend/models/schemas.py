@@ -190,3 +190,8 @@ class ProposalUpdate(BaseModel):
     """提案更新リクエスト"""
     status: str = Field(..., description="ステータス（候補/提案済み/面談中/成約/見送り）")
     notes: Optional[str] = Field(None, description="メモ")
+
+
+class BulkDeleteRequest(BaseModel):
+    """一括削除リクエスト"""
+    ids: list[int] = Field(..., description="削除対象のIDリスト", min_length=1)

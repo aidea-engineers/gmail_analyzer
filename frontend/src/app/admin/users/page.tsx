@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import {
   listUsers,
   createUser,
@@ -502,7 +503,17 @@ export default function AdminUsersPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3" style={{ color: "var(--foreground)" }}>
-                      {engineerName(u.engineer_id)}
+                      {u.engineer_id ? (
+                        <Link
+                          href={`/engineers?id=${u.engineer_id}`}
+                          className="underline hover:opacity-70"
+                          style={{ color: "var(--primary)" }}
+                        >
+                          {engineerName(u.engineer_id)}
+                        </Link>
+                      ) : (
+                        "-"
+                      )}
                     </td>
                     <td className="px-4 py-3" style={{ color: "var(--foreground)" }}>
                       {u.display_name || "-"}
