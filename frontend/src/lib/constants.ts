@@ -35,20 +35,22 @@ export const EMPTY_FORM: EngineerForm = {
 };
 
 export const SKILL_CATEGORY_COLORS: Record<string, string> = {
-  "言語": "bg-blue-100 text-blue-700",
+  "WEB": "bg-blue-100 text-blue-700",
   "FW": "bg-purple-100 text-purple-700",
   "インフラ": "bg-orange-100 text-orange-700",
   "DB": "bg-green-100 text-green-700",
+  "ネットワーク": "bg-cyan-100 text-cyan-700",
   "その他": "bg-gray-100 text-gray-600",
 };
 
-export const SKILL_CATEGORY_ORDER = ["言語", "FW", "インフラ", "DB", "その他"];
+export const SKILL_CATEGORY_ORDER = ["WEB", "FW", "インフラ", "DB", "ネットワーク", "その他"];
 
 export const SKILL_CHECKBOXES: Record<string, string[]> = {
-  "言語": ["Java", "Python", "TypeScript", "JavaScript", "Go", "C#", "Ruby", "PHP", "Swift", "Kotlin", "C", "C++", "Rust", "Scala", "Perl", "R", "COBOL", "VB.NET", "Dart", "Shell"],
+  "WEB": ["Java", "Python", "TypeScript", "JavaScript", "Go", "C#", "Ruby", "PHP", "Swift", "Kotlin", "C", "C++", "Rust", "Scala", "Perl", "R", "COBOL", "VB.NET", "Dart", "Shell"],
   "FW": ["React", "Vue.js", "Angular", "Next.js", "Spring Boot", "Django", "Flask", "Laravel", "Ruby on Rails", ".NET", "Express.js", "NestJS", "Flutter", "Unity"],
   "インフラ": ["AWS", "Azure", "GCP", "Docker", "Kubernetes", "Terraform", "Linux", "Jenkins", "Ansible"],
   "DB": ["PostgreSQL", "MySQL", "Oracle", "SQL Server", "MongoDB", "Redis", "DynamoDB", "Elasticsearch"],
+  "ネットワーク": ["Cisco", "CCNA", "CCNP", "Juniper", "Fortinet", "Palo Alto", "F5", "VMware NSX", "Aruba", "Wireshark"],
 };
 
 export const ALL_CHECKBOX_SKILLS = Object.values(SKILL_CHECKBOXES).flat();

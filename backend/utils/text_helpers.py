@@ -122,17 +122,17 @@ def normalize_skill_name(skill: str) -> str:
 # --- スキルカテゴリ分類 ---
 
 SKILL_CATEGORY: dict[str, str] = {
-    # 言語
-    "Java": "言語", "Python": "言語", "TypeScript": "言語", "JavaScript": "言語",
-    "Go": "言語", "C#": "言語", "Ruby": "言語", "PHP": "言語", "Swift": "言語",
-    "Kotlin": "言語", "Rust": "言語", "Scala": "言語", "C++": "言語", "C": "言語",
-    "R": "言語", "Perl": "言語", "Shell": "言語", "VBA": "言語", "COBOL": "言語",
-    "SQL": "言語",
+    # WEB（旧: 言語）
+    "Java": "WEB", "Python": "WEB", "TypeScript": "WEB", "JavaScript": "WEB",
+    "Go": "WEB", "C#": "WEB", "Ruby": "WEB", "PHP": "WEB", "Swift": "WEB",
+    "Kotlin": "WEB", "Rust": "WEB", "Scala": "WEB", "C++": "WEB", "C": "WEB",
+    "R": "WEB", "Perl": "WEB", "Shell": "WEB", "VBA": "WEB", "COBOL": "WEB",
+    "SQL": "WEB", "Dart": "WEB", "VB.NET": "WEB",
     # フレームワーク
     "React": "FW", "Vue.js": "FW", "Angular": "FW", "Next.js": "FW", "Nuxt.js": "FW",
     "Node.js": "FW", "Spring Boot": "FW", "Django": "FW", "Flask": "FW",
     "Ruby on Rails": "FW", "Laravel": "FW", "Express": "FW", "Flutter": "FW",
-    ".NET": "FW",
+    ".NET": "FW", "Express.js": "FW", "NestJS": "FW", "Unity": "FW",
     # インフラ/クラウド
     "AWS": "インフラ", "Azure": "インフラ", "GCP": "インフラ", "Docker": "インフラ",
     "Kubernetes": "インフラ", "Terraform": "インフラ", "Linux": "インフラ",
@@ -140,6 +140,11 @@ SKILL_CATEGORY: dict[str, str] = {
     # DB
     "MySQL": "DB", "PostgreSQL": "DB", "Oracle": "DB", "MongoDB": "DB",
     "Redis": "DB", "SQL Server": "DB", "DynamoDB": "DB", "Elasticsearch": "DB",
+    # ネットワーク
+    "Cisco": "ネットワーク", "CCNA": "ネットワーク", "CCNP": "ネットワーク",
+    "Juniper": "ネットワーク", "Fortinet": "ネットワーク", "Palo Alto": "ネットワーク",
+    "F5": "ネットワーク", "VMware NSX": "ネットワーク", "Aruba": "ネットワーク",
+    "Wireshark": "ネットワーク",
 }
 
 
@@ -147,7 +152,7 @@ def categorize_skills(skill_names: list[str]) -> dict[str, list[str]]:
     """スキル名リストをカテゴリ別に分類する。
 
     Returns:
-        {"言語": [...], "FW": [...], "インフラ": [...], "DB": [...], "その他": [...]}
+        {"WEB": [...], "FW": [...], "インフラ": [...], "DB": [...], "ネットワーク": [...], "その他": [...]}
         空のカテゴリは含まない。
     """
     result: dict[str, list[str]] = {}

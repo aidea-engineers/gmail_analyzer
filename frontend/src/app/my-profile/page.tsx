@@ -18,7 +18,6 @@ import {
   AREA_OPTIONS,
   EDUCATION_OPTIONS,
   INDUSTRY_OPTIONS,
-  PROFICIENCY_OPTIONS,
 } from "@/lib/constants";
 
 export default function MyProfilePage() {
@@ -223,17 +222,6 @@ export default function MyProfilePage() {
           userEmail={user?.email || ""}
           onRegistered={() => window.location.reload()}
         />
-        {/* PW変更はエンジニア紐付けがなくても可能 */}
-        <PasswordSection
-          newPassword={newPassword}
-          setNewPassword={setNewPassword}
-          pwConfirm={pwConfirm}
-          setPwConfirm={setPwConfirm}
-          changingPw={changingPw}
-          onSubmit={handleChangePw}
-          error={error}
-          success={success}
-        />
       </div>
     );
   }
@@ -378,54 +366,43 @@ export default function MyProfilePage() {
           {/* スキル */}
           <Section title="スキル">
             {SKILL_CATEGORY_ORDER.filter((cat) => cat !== "その他").map((cat) => (
-              <div key={cat} className="mb-3">
-                <button
-                  type="button"
-                  onClick={() => setOpenCategories((p) => ({ ...p, [cat]: !p[cat] }))}
-                  className="text-sm font-medium mb-1 flex items-center gap-1"
-                  style={{ color: "var(--foreground)" }}
-                >
+              <div key={cat} className="mb-4">
+                <div className="text-sm font-medium mb-2">
                   <span className={`px-1.5 py-0.5 rounded text-xs ${SKILL_CATEGORY_COLORS[cat]}`}>{cat}</span>
-                  <span className="text-xs" style={{ color: "var(--muted)" }}>
-                    {openCategories[cat] ? "▼" : "▶"}
-                  </span>
-                </button>
-                {(openCategories[cat] ?? true) && (
-                  <div className="flex flex-wrap gap-2 mt-1">
-                    {SKILL_CHECKBOXES[cat].map((skill) => {
-                      const checked = form.skills.includes(skill);
-                      return (
-                        <label key={skill} className="flex items-center gap-1 text-xs" style={{ color: "var(--foreground)" }}>
+                </div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  {SKILL_CHECKBOXES[cat]?.map((skill) => {
+                    const checked = form.skills.includes(skill);
+                    return (
+                      <label key={skill} className="flex items-center gap-1 text-xs" style={{ color: "var(--foreground)" }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleSkill(skill)}
+                          className="rounded"
+                        />
+                        {skill}
+                        {checked && (
                           <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleSkill(skill)}
-                            className="rounded"
+                            type="number"
+                            value={form.skill_proficiency[skill]?.replace(/年$/, "") || ""}
+                            onChange={(e) =>
+                              setForm((p) => ({
+                                ...p,
+                                skill_proficiency: { ...p.skill_proficiency, [skill]: e.target.value ? `${e.target.value}年` : "" },
+                              }))
+                            }
+                            className="ml-1 w-12 px-1 py-0.5 rounded text-xs text-center"
+                            style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}
+                            placeholder="年"
+                            min="0"
                           />
-                          {skill}
-                          {checked && (
-                            <select
-                              value={form.skill_proficiency[skill] || ""}
-                              onChange={(e) =>
-                                setForm((p) => ({
-                                  ...p,
-                                  skill_proficiency: { ...p.skill_proficiency, [skill]: e.target.value },
-                                }))
-                              }
-                              className="ml-1 px-1 py-0.5 rounded text-xs"
-                              style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}
-                            >
-                              <option value="">-</option>
-                              {PROFICIENCY_OPTIONS.map((l) => (
-                                <option key={l} value={l}>{l}</option>
-                              ))}
-                            </select>
-                          )}
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
+                        )}
+                        {checked && <span className="text-xs" style={{ color: "var(--muted)" }}>年</span>}
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
             ))}
             <div>
@@ -745,11 +722,7 @@ const EMPTY_CAREER: CareerEntry = {
 
 const GENDER_OPTIONS = ["男性", "女性", "その他", "未回答"];
 
-const POPULAR_SKILLS = [
-  "Java", "Python", "JavaScript", "TypeScript", "React", "AWS", "Docker",
-  "Go", "PHP", "Ruby", "Vue.js", "Angular", "Next.js", "Spring Boot",
-  "PostgreSQL", "MySQL", "Linux", "Kubernetes",
-];
+// POPULAR_SKILLS removed — quick-add chips no longer used
 
 function SelfRegistrationForm({
   userEmail,
@@ -768,26 +741,10 @@ function SelfRegistrationForm({
   const [regError, setRegError] = useState("");
   const [regSuccess, setRegSuccess] = useState("");
 
-  // スキルカテゴリ折りたたみ
-  const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({});
-
   const addSkillEntry = () => setSkillEntries((p) => [...p, { name: "", years: "" }]);
   const removeSkillEntry = (i: number) => setSkillEntries((p) => p.filter((_, idx) => idx !== i));
   const updateSkillEntry = (i: number, field: "name" | "years", value: string) => {
     setSkillEntries((p) => p.map((e, idx) => (idx === i ? { ...e, [field]: value } : e)));
-  };
-
-  const addQuickSkill = (skill: string) => {
-    // Add to checkbox skills if it's in the checkbox list, otherwise add as entry
-    if (ALL_CHECKBOX_SKILLS.includes(skill)) {
-      if (!form.skills.includes(skill)) {
-        setForm((p) => ({ ...p, skills: [...p.skills, skill] }));
-      }
-    } else {
-      if (!skillEntries.some((e) => e.name === skill)) {
-        setSkillEntries((p) => [...p, { name: skill, years: "" }]);
-      }
-    }
   };
 
   const addCareer = () => setCareers((p) => [...p, { ...EMPTY_CAREER }]);
@@ -896,7 +853,13 @@ function SelfRegistrationForm({
       setRegSuccess("プロフィールを登録しました。");
       setTimeout(() => onRegistered(), 1000);
     } catch (e: unknown) {
-      setRegError(e instanceof Error ? e.message : String(e));
+      if (e instanceof Error) {
+        setRegError(e.message);
+      } else if (typeof e === "object" && e !== null) {
+        setRegError(JSON.stringify(e));
+      } else {
+        setRegError(String(e));
+      }
     } finally {
       setSaving(false);
     }
@@ -987,83 +950,45 @@ function SelfRegistrationForm({
 
       {/* スキル */}
       <Section title="スキル">
-        {/* Quick-add chips */}
-        <div className="mb-4">
-          <label className="text-xs block mb-2" style={{ color: "var(--muted)" }}>よく使われるスキル（クリックで追加）</label>
-          <div className="flex flex-wrap gap-2">
-            {POPULAR_SKILLS.map((skill) => {
-              const isSelected = form.skills.includes(skill) || skillEntries.some((e) => e.name === skill);
-              return (
-                <button
-                  key={skill}
-                  type="button"
-                  onClick={() => addQuickSkill(skill)}
-                  className="px-3 py-1 rounded-full text-xs transition-colors"
-                  style={{
-                    background: isSelected ? "var(--primary)" : "var(--background)",
-                    color: isSelected ? "white" : "var(--foreground)",
-                    border: "1px solid var(--border)",
-                    opacity: isSelected ? 0.6 : 1,
-                  }}
-                  disabled={isSelected}
-                >
-                  {skill}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Checkbox skills by category */}
+        {/* Checkbox skills by category — always expanded */}
         {SKILL_CATEGORY_ORDER.filter((cat) => cat !== "その他").map((cat) => (
-          <div key={cat} className="mb-3">
-            <button
-              type="button"
-              onClick={() => setOpenCategories((p) => ({ ...p, [cat]: !p[cat] }))}
-              className="text-sm font-medium mb-1 flex items-center gap-1"
-              style={{ color: "var(--foreground)" }}
-            >
+          <div key={cat} className="mb-4">
+            <div className="text-sm font-medium mb-2">
               <span className={`px-1.5 py-0.5 rounded text-xs ${SKILL_CATEGORY_COLORS[cat]}`}>{cat}</span>
-              <span className="text-xs" style={{ color: "var(--muted)" }}>
-                {openCategories[cat] ? "▼" : "▶"}
-              </span>
-            </button>
-            {(openCategories[cat] ?? false) && (
-              <div className="flex flex-wrap gap-2 mt-1">
-                {SKILL_CHECKBOXES[cat].map((skill) => {
-                  const checked = form.skills.includes(skill);
-                  return (
-                    <label key={skill} className="flex items-center gap-1 text-xs" style={{ color: "var(--foreground)" }}>
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              {SKILL_CHECKBOXES[cat]?.map((skill) => {
+                const checked = form.skills.includes(skill);
+                return (
+                  <label key={skill} className="flex items-center gap-1 text-xs" style={{ color: "var(--foreground)" }}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleSkill(skill)}
+                      className="rounded"
+                    />
+                    {skill}
+                    {checked && (
                       <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleSkill(skill)}
-                        className="rounded"
+                        type="number"
+                        value={form.skill_proficiency[skill]?.replace(/年$/, "") || ""}
+                        onChange={(e) =>
+                          setForm((p) => ({
+                            ...p,
+                            skill_proficiency: { ...p.skill_proficiency, [skill]: e.target.value ? `${e.target.value}年` : "" },
+                          }))
+                        }
+                        className="ml-1 w-12 px-1 py-0.5 rounded text-xs text-center"
+                        style={inputStyle}
+                        placeholder="年"
+                        min="0"
                       />
-                      {skill}
-                      {checked && (
-                        <select
-                          value={form.skill_proficiency[skill] || ""}
-                          onChange={(e) =>
-                            setForm((p) => ({
-                              ...p,
-                              skill_proficiency: { ...p.skill_proficiency, [skill]: e.target.value },
-                            }))
-                          }
-                          className="ml-1 px-1 py-0.5 rounded text-xs"
-                          style={inputStyle}
-                        >
-                          <option value="">-</option>
-                          {PROFICIENCY_OPTIONS.map((l) => (
-                            <option key={l} value={l}>{l}</option>
-                          ))}
-                        </select>
-                      )}
-                    </label>
-                  );
-                })}
-              </div>
-            )}
+                    )}
+                    {checked && <span className="text-xs" style={{ color: "var(--muted)" }}>年</span>}
+                  </label>
+                );
+              })}
+            </div>
           </div>
         ))}
 

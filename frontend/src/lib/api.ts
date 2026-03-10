@@ -32,7 +32,9 @@ async function fetchAPI<T>(path: string, init?: RequestInit): Promise<T> {
     let detail = res.statusText;
     try {
       const body = await res.json();
-      if (body.detail) detail = body.detail;
+      if (body.detail) {
+        detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+      }
     } catch {}
     throw new Error(detail);
   }
