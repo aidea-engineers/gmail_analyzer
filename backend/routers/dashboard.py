@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 
-from core.auth import CurrentUser, require_admin
+from core.auth import CurrentUser, require_staff
 from core.cache import get_cached, set_cached
 from core.database import (
     get_total_stats,
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 @router.get("/kpis")
 def dashboard_kpis(
     period: str = Query("30日", description="表示期間: 7日, 30日, 90日, 全期間"),
-    user: CurrentUser = Depends(require_admin),
+    user: CurrentUser = Depends(require_staff),
 ):
     cache_key = f"kpis:{period}"
     cached = get_cached("dashboard", cache_key)
@@ -38,7 +38,7 @@ def dashboard_kpis(
 def dashboard_charts(
     period: str = Query("30日"),
     granularity: str = Query("daily", description="トレンド粒度: daily, weekly"),
-    user: CurrentUser = Depends(require_admin),
+    user: CurrentUser = Depends(require_staff),
 ):
     cache_key = f"charts:{period}:{granularity}"
     cached = get_cached("dashboard", cache_key)
@@ -67,7 +67,7 @@ def dashboard_charts(
 @router.get("/monthly-summary")
 def dashboard_monthly_summary(
     months: int = Query(6, description="取得する月数", ge=1, le=24),
-    user: CurrentUser = Depends(require_admin),
+    user: CurrentUser = Depends(require_staff),
 ):
     cache_key = f"monthly:{months}"
     cached = get_cached("dashboard", cache_key)

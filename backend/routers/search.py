@@ -16,14 +16,14 @@ from core.database import (
     get_distinct_job_types,
     get_distinct_companies,
 )
-from core.auth import CurrentUser, require_admin
+from core.auth import CurrentUser, require_staff
 from utils.date_helpers import format_date_jp
 
 router = APIRouter(prefix="/api/search", tags=["search"])
 
 
 @router.get("/filters")
-def search_filters(user: CurrentUser = Depends(require_admin)):
+def search_filters(user: CurrentUser = Depends(require_staff)):
     return {
         "skills": get_distinct_skills(),
         "areas": get_distinct_areas(),
@@ -46,7 +46,7 @@ def search_listings_api(
     date_to: Optional[str] = None,
     page: int = Query(1, ge=1, description="ページ番号"),
     per_page: int = Query(50, ge=1, le=200, description="1ページあたりの件数"),
-    user: CurrentUser = Depends(require_admin),
+    user: CurrentUser = Depends(require_staff),
 ):
     skills_list = [s.strip() for s in skills.split(",") if s.strip()] if skills else None
     areas_list = [a.strip() for a in areas.split(",") if a.strip()] if areas else None
@@ -113,7 +113,7 @@ def export_csv(
     price_max: Optional[int] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
-    user: CurrentUser = Depends(require_admin),
+    user: CurrentUser = Depends(require_staff),
 ):
     skills_list = [s.strip() for s in skills.split(",") if s.strip()] if skills else None
     areas_list = [a.strip() for a in areas.split(",") if a.strip()] if areas else None

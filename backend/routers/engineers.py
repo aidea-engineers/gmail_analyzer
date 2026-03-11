@@ -9,7 +9,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
 
-from core.auth import CurrentUser, require_auth, require_admin
+from core.auth import CurrentUser, require_auth, require_admin, require_staff, require_engineer
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ router = APIRouter(prefix="/api/engineers", tags=["engineers"])
 
 
 @router.get("/stats")
-def engineer_stats(user: CurrentUser = Depends(require_admin)):
+def engineer_stats(user: CurrentUser = Depends(require_staff)):
     """エンジニアのKPI統計"""
     try:
         return get_engineer_stats()
@@ -49,7 +49,7 @@ def engineer_stats(user: CurrentUser = Depends(require_admin)):
 
 
 @router.get("/filters")
-def engineer_filters(user: CurrentUser = Depends(require_admin)):
+def engineer_filters(user: CurrentUser = Depends(require_staff)):
     """フィルター選択肢を返す"""
     try:
         return {
@@ -81,7 +81,7 @@ def engineer_list(
     job_types: Optional[str] = Query(None, description="カンマ区切り職種経験"),
     positions: Optional[str] = Query(None, description="カンマ区切りポジション"),
     remote: Optional[str] = Query(None, description="カンマ区切りリモート希望"),
-    user: CurrentUser = Depends(require_admin),
+    user: CurrentUser = Depends(require_staff),
 ):
     """エンジニア一覧（フィルター付き）"""
     try:
@@ -153,7 +153,7 @@ def engineer_export(
     job_types: Optional[str] = Query(None, description="カンマ区切り職種経験"),
     positions: Optional[str] = Query(None, description="カンマ区切りポジション"),
     remote: Optional[str] = Query(None, description="カンマ区切りリモート希望"),
-    user: CurrentUser = Depends(require_admin),
+    user: CurrentUser = Depends(require_staff),
 ):
     """エンジニア一覧をCSVエクスポート（BOM付きUTF-8）"""
     skills_list = [s.strip() for s in skills.split(",") if s.strip()] if skills else None
@@ -300,7 +300,7 @@ async def engineer_import_csv(file: UploadFile = File(...), user: CurrentUser = 
 
 
 @router.get("/self")
-async def get_self_profile(user: CurrentUser = Depends(require_auth)):
+async def get_self_profile(user: CurrentUser = Depends(require_engineer)):
     """自分のエンジニア情報を取得する（紐付けなしならnullを返す）。"""
     if not user.engineer_id:
         return {"engineer": None}
@@ -314,7 +314,7 @@ async def get_self_profile(user: CurrentUser = Depends(require_auth)):
 @router.post("/self")
 async def register_self(
     body: EngineerSelfRegister,
-    user: CurrentUser = Depends(require_auth),
+    user: CurrentUser = Depends(require_engineer),
 ):
     """エンジニアが自分のプロフィールを自己登録する（engineer_idが未紐付けの場合のみ）。"""
     if user.engineer_id:
@@ -340,7 +340,7 @@ async def register_self(
 
 
 @router.post("")
-def create_engineer(body: EngineerCreate, user: CurrentUser = Depends(require_admin)):
+def create_engineer(body: EngineerCreate, user: CurrentUser = Depends(require_staff)):
     """エンジニア新規登録"""
     try:
         data = body.model_dump()
@@ -356,7 +356,7 @@ def create_engineer(body: EngineerCreate, user: CurrentUser = Depends(require_ad
 @router.get("/{eng_id}")
 def get_engineer_detail(eng_id: int, user: CurrentUser = Depends(require_auth)):
     """エンジニア詳細（スキル+アサイン履歴付き）。エンジニアは自分の情報のみ閲覧可。"""
-    if not user.is_admin and user.engineer_id != eng_id:
+    if not user.is_staff and user.engineer_id != eng_id:
         raise HTTPException(status_code=403, detail="自分の情報のみ閲覧できます")
     eng = get_engineer(eng_id)
     if not eng:
@@ -384,11 +384,11 @@ _ADMIN_ONLY_FIELDS = {
 @router.put("/{eng_id}")
 def update_engineer_api(eng_id: int, body: EngineerUpdate, user: CurrentUser = Depends(require_auth)):
     """エンジニア更新。エンジニアは自分の情報のみ更新可。"""
-    if not user.is_admin and user.engineer_id != eng_id:
+    if not user.is_staff and user.engineer_id != eng_id:
         raise HTTPException(status_code=403, detail="自分の情報のみ更新できます")
     data = {k: v for k, v in body.model_dump(exclude_unset=True).items()}
-    # エンジニア本人の更新時は管理者専用フィールドを拒否
-    if not user.is_admin:
+    # エンジニア本人の更新時は管理者専用フィールドを拒否（staff=admin/salesは許可）
+    if not user.is_staff:
         forbidden = set(data.keys()) & _ADMIN_ONLY_FIELDS
         if forbidden:
             raise HTTPException(
@@ -429,7 +429,7 @@ def delete_engineer_api(eng_id: int, user: CurrentUser = Depends(require_admin))
 
 
 @router.post("/{eng_id}/assignments")
-def create_assignment(eng_id: int, body: AssignmentCreate, user: CurrentUser = Depends(require_admin)):
+def create_assignment(eng_id: int, body: AssignmentCreate, user: CurrentUser = Depends(require_staff)):
     """アサイン履歴追加"""
     # エンジニアの存在確認
     eng = get_engineer(eng_id)
@@ -441,7 +441,7 @@ def create_assignment(eng_id: int, body: AssignmentCreate, user: CurrentUser = D
 
 
 @router.delete("/assignments/{assignment_id}")
-def delete_assignment_api(assignment_id: int, user: CurrentUser = Depends(require_admin)):
+def delete_assignment_api(assignment_id: int, user: CurrentUser = Depends(require_staff)):
     """アサイン履歴削除"""
     ok = delete_assignment(assignment_id)
     if not ok:

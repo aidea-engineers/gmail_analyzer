@@ -8,7 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from core.auth import CurrentUser, require_auth, require_admin
+from core.auth import CurrentUser, require_auth, require_admin, VALID_ROLES
 from core import supabase_admin
 from core.database import (
     get_user_profile,
@@ -65,6 +65,7 @@ async def get_me(user: CurrentUser = Depends(require_auth)):
         "engineer_id": user.engineer_id,
         "display_name": user.display_name,
         "is_admin": user.is_admin,
+        "is_staff": user.is_staff,
     }
 
 
@@ -84,6 +85,10 @@ async def create_user(
     1. Supabase Auth にユーザーを作成
     2. user_profiles に紐付けレコードを作成
     """
+    # ロール検証
+    if body.role not in VALID_ROLES:
+        raise HTTPException(status_code=400, detail=f"無効なロールです: {body.role}")
+
     # Supabase Auth にユーザー作成
     if supabase_admin.is_configured():
         try:
@@ -136,7 +141,7 @@ async def invite_user(
         raise HTTPException(status_code=400, detail=str(e))
 
     # user_profiles に保存
-    role = body.role if body.role in ("admin", "engineer") else "engineer"
+    role = body.role if body.role in VALID_ROLES else "engineer"
     profile = upsert_user_profile(
         user_id=auth_uid,
         email=body.email,
@@ -221,6 +226,20 @@ async def update_user(
     if not existing:
         raise HTTPException(status_code=404, detail="ユーザーが見つかりません")
 
+    # ロール検証
+    if body.role is not None and body.role not in VALID_ROLES:
+        raise HTTPException(status_code=400, detail=f"無効なロールです: {body.role}")
+
+    # 自分自身のロール変更を禁止
+    if body.role is not None and user_id == user.id and body.role != existing["role"]:
+        raise HTTPException(status_code=400, detail="自分自身のロールは変更できません")
+
+    # 最後のadminを降格させない
+    if body.role is not None and existing["role"] == "admin" and body.role != "admin":
+        admin_count = sum(1 for p in list_user_profiles() if p["role"] == "admin")
+        if admin_count <= 1:
+            raise HTTPException(status_code=400, detail="最後の管理者のロールは変更できません")
+
     profile = upsert_user_profile(
         user_id=user_id,
         email=existing["email"],
@@ -239,6 +258,13 @@ async def remove_user(
     """ユーザーを削除する（管理者のみ）。Supabase Auth + user_profiles 両方削除。"""
     if user_id == user.id:
         raise HTTPException(status_code=400, detail="自分自身は削除できません")
+
+    # 最後のadminを削除させない
+    target = get_user_profile(user_id)
+    if target and target["role"] == "admin":
+        admin_count = sum(1 for p in list_user_profiles() if p["role"] == "admin")
+        if admin_count <= 1:
+            raise HTTPException(status_code=400, detail="最後の管理者は削除できません")
 
     # Supabase Auth からも削除
     if supabase_admin.is_configured():

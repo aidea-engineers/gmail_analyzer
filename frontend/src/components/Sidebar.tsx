@@ -5,26 +5,39 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 
-const ADMIN_NAV_ITEMS = [
-  { href: "/", label: "ダッシュボード", icon: "📊" },
-  { href: "/search", label: "案件検索", icon: "🔍" },
-  { href: "/engineers", label: "エンジニア管理", icon: "👤" },
-  { href: "/matching", label: "マッチング", icon: "🤝" },
-  { href: "/admin/users", label: "アカウント管理", icon: "🔑" },
-  { href: "/fetch", label: "メール取得", icon: "📧" },
-  { href: "/settings", label: "設定", icon: "⚙️" },
+type Role = "admin" | "sales" | "engineer";
+
+interface NavItem {
+  href: string;
+  label: string;
+  icon: string;
+  allowedRoles: Role[];
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { href: "/", label: "ダッシュボード", icon: "📊", allowedRoles: ["admin", "sales"] },
+  { href: "/search", label: "案件検索", icon: "🔍", allowedRoles: ["admin", "sales"] },
+  { href: "/engineers", label: "エンジニア管理", icon: "👤", allowedRoles: ["admin", "sales"] },
+  { href: "/matching", label: "マッチング", icon: "🤝", allowedRoles: ["admin", "sales"] },
+  { href: "/admin/users", label: "アカウント管理", icon: "🔑", allowedRoles: ["admin"] },
+  { href: "/fetch", label: "メール取得", icon: "📧", allowedRoles: ["admin"] },
+  { href: "/settings", label: "設定", icon: "⚙️", allowedRoles: ["admin"] },
+  { href: "/my-profile", label: "マイプロフィール", icon: "👤", allowedRoles: ["engineer"] },
 ];
 
-const ENGINEER_NAV_ITEMS = [
-  { href: "/my-profile", label: "マイプロフィール", icon: "👤" },
-];
+const ROLE_LABELS: Record<Role, string> = {
+  admin: "管理者",
+  sales: "営業",
+  engineer: "エンジニア",
+};
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const { user, signOut } = useAuth();
 
-  const navItems = user?.is_admin ? ADMIN_NAV_ITEMS : ENGINEER_NAV_ITEMS;
+  const userRole = (user?.role || "engineer") as Role;
+  const navItems = NAV_ITEMS.filter((item) => item.allowedRoles.includes(userRole));
 
   return (
     <>
@@ -87,7 +100,7 @@ export default function Sidebar() {
             <div className="mb-3">
               <p className="text-xs text-slate-400 truncate">{user.email}</p>
               <p className="text-xs text-slate-500">
-                {user.is_admin ? "管理者" : "エンジニア"}
+                {ROLE_LABELS[userRole] || userRole}
               </p>
             </div>
           )}

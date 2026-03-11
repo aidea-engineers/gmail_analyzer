@@ -38,30 +38,57 @@
 
 ---
 
-## 進行中タスク（2026-03-10）
+## 完了タスク（2026-03-10 セッション3）
 
-### エンジニア招待フロー改善
-- **PW設定をmy-profile内に統合**: set-passwordページ依存をやめ、SelfRegistrationForm内で2ステップ化（PW設定→プロフィール入力）
-- **set-passwordページ**: my-profileへのリダイレクトに変更
-- **sessionStorageでステップ永続化**: supabase.auth.updateUserによる再レンダリングでリセットされるバグ対策
-- **テスト状況**: Supabaseレートリミット（1時間3通）に引っかかり、フルフロー再テスト待ち
+### パフォーマンス最適化 ✅
+- **DBコネクションプール**: PostgreSQL接続をプール化（min=1, max=5）→ 毎回の接続/切断コストを削減
+- **TTLキャッシュ**: ダッシュボードのKPI/チャート/月次サマリーを5分間キャッシュ（core/cache.py新規作成）
+- **N+1クエリ修正**: 月次サマリーのtop_area取得をLATERAL JOINで1クエリ化
+- **案件検索ページネーション**: フロント/バックエンド両方にpage/per_page対応追加
 
-### スキルUI改善（全画面共通）
-- 「言語」→「WEB」名称変更
-- 「ネットワーク」カテゴリ追加（Cisco, CCNA, CCNP, Juniper, Fortinet, Palo Alto, F5, VMware NSX, Aruba, Wireshark）
-- 「よく使われるスキル」欄削除（自己登録フォーム）
-- カテゴリ折りたたみ廃止（常に展開）
-- スキル習熟度: 初級/中級/上級 → 年数入力に変更（my-profile + engineers管理画面）
-- バックエンド（text_helpers.py）のカテゴリ分類も同期更新済み
+### Phase 1残りタスク ✅
+- **アカウント管理→エンジニアリンク**: ユーザー一覧のエンジニア名をクリック→エンジニア詳細に遷移
+- **BulkDeleteRequest Pydanticモデル化**: 一括削除のbodyをPydanticモデルに変更
 
-### エンジニア一括削除機能（実装中）
-- バックエンド: POST /api/engineers/bulk-delete エンドポイント追加
-- フロント: チェックボックス + 全選択 + 一括削除ボタン（これから実装）
-- CASCADE削除（skills, careers, assignments, proposals自動削除、user_profilesはSET NULL）
+### Gemini APIキー漏洩修正 ✅
+- **原因**: GitHubリポジトリがPublicのため、Googleがコード内のAPIキーを漏洩と判定→403 PERMISSION_DENIED
+- **影響**: AI解析が全件失敗、未処理メールが10,300件に蓄積
+- **対応**: Google Cloud Console（shimizu@cloud-link.co.jp）で新キー「API キー 3」作成→Render環境変数更新→デプロイ→動作確認OK
+- **処理再開**: エラー0件で処理進行中。1日約1,000件ペースで約10日で全件処理見込み
 
-### バグ修正
-- プロフィール登録時「object」エラー表示 → api.tsでdetailオブジェクト対応
-- phoneフィールドnullバリデーションエラー → 空文字列送信に修正
+### cron-status診断改善 ✅
+- recent_logs（直近3件）をcron-statusレスポンスに追加
+- Gemini APIエラー詳細をfetch_logに記録（_last_error属性）
+
+---
+
+## Phase 2 — 次にやること
+
+### 未着手（設計が必要→Codexと壁打ち）
+1. **3ロール化**（admin/sales/engineer）+ 営業向け機能
+2. **取引先管理充実** + 等級制度基盤
+3. **HRMOS API連携実装**
+
+### 注意
+- 上記はすべて設計レビュー（/ask-codex）が必要
+- 3ロール化は影響範囲が広い（全ルーター+フロント全ページ）ので慎重に
+
+---
+
+## 完了済み — Phase 1タスク（2026-03-10 セッション1-2）
+
+### エンジニア招待フロー改善 ✅
+- PW設定をmy-profile内に2ステップ化、set-passwordはリダイレクト化
+- sessionStorageでステップ永続化
+
+### スキルUI改善 ✅
+- 言語→WEB名称変更、ネットワークカテゴリ追加、折りたたみ廃止、年数入力化
+
+### エンジニア一括削除 ✅
+- POST /api/engineers/bulk-delete + フロントUI（チェックボックス+全選択+一括削除）
+
+### バグ修正 ✅
+- objectエラー表示、phoneバリデーション
 
 ---
 

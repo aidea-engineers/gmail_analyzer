@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useAuth } from "@/components/AuthProvider";
 import {
   getEngineerStats,
   getEngineerFilters,
@@ -38,6 +39,8 @@ import {
 export default function EngineersPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user } = useAuth();
+  const isAdmin = user?.is_admin ?? false;
   // データ
   const [stats, setStats] = useState<EngineerStats | null>(null);
   const [filters, setFilters] = useState<EngineerFilters | null>(null);
@@ -580,16 +583,18 @@ export default function EngineersPage() {
               >
                 新規登録
               </button>
-              <button
-                onClick={() => {
-                  setShowImport(!showImport);
-                  setImportResult(null);
-                  setCsvFile(null);
-                }}
-                className="px-3 py-1.5 bg-orange-500 text-white text-sm rounded-lg hover:bg-orange-600 transition-colors"
-              >
-                CSVインポート
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => {
+                    setShowImport(!showImport);
+                    setImportResult(null);
+                    setCsvFile(null);
+                  }}
+                  className="px-3 py-1.5 bg-orange-500 text-white text-sm rounded-lg hover:bg-orange-600 transition-colors"
+                >
+                  CSVインポート
+                </button>
+              )}
               <a
                 href={getEngineerExportURL(buildParams())}
                 className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
@@ -933,8 +938,8 @@ export default function EngineersPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {/* 一括操作バー */}
-              {selectedIds.size > 0 && (
+              {/* 一括操作バー（admin のみ） */}
+              {isAdmin && selectedIds.size > 0 && (
                 <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-blue-50 border border-blue-200 sticky top-0 z-10">
                   <span className="text-sm text-blue-700 font-medium">{selectedIds.size}名を選択中</span>
                   <button
@@ -959,12 +964,14 @@ export default function EngineersPage() {
                 style={{ borderColor: "var(--border)" }}
               >
                 <span>
-                  <input
-                    type="checkbox"
-                    checked={engineers.length > 0 && selectedIds.size === engineers.length}
-                    onChange={toggleSelectAll}
-                    className="rounded"
-                  />
+                  {isAdmin && (
+                    <input
+                      type="checkbox"
+                      checked={engineers.length > 0 && selectedIds.size === engineers.length}
+                      onChange={toggleSelectAll}
+                      className="rounded"
+                    />
+                  )}
                 </span>
                 <span>名前</span>
                 <span>ステータス</span>
@@ -987,12 +994,14 @@ export default function EngineersPage() {
                     onClick={() => handleExpand(eng.id)}
                   >
                     <span onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(eng.id)}
-                        onChange={() => toggleSelect(eng.id)}
-                        className="rounded"
-                      />
+                      {isAdmin && (
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(eng.id)}
+                          onChange={() => toggleSelect(eng.id)}
+                          className="rounded"
+                        />
+                      )}
                     </span>
                     <span className="text-sm font-medium truncate">{eng.name}</span>
                     <span>
@@ -1191,12 +1200,12 @@ export default function EngineersPage() {
                         >
                           編集
                         </button>
-                        <button
+                        {isAdmin && <button
                           onClick={() => handleDelete(eng.id, eng.name)}
                           className="px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 transition-colors"
                         >
                           削除
-                        </button>
+                        </button>}
                         <button
                           onClick={() =>
                             router.push(`/matching?tab=engineer&id=${eng.id}`)

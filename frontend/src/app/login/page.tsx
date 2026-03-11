@@ -14,10 +14,10 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [loginSuccess, setLoginSuccess] = useState(false);
 
-  // AuthProviderがuserをセットしたらリダイレクト
+  // AuthProviderがuserをセットしたらロール別にリダイレクト
   useEffect(() => {
     if (user) {
-      router.push("/");
+      router.push(user.role === "engineer" ? "/my-profile" : "/");
     }
   }, [user, router]);
 

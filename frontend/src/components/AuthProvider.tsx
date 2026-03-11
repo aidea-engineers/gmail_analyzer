@@ -11,6 +11,7 @@ interface AuthUser {
   engineer_id: number | null;
   display_name: string;
   is_admin: boolean;
+  is_staff: boolean;
 }
 
 interface AuthContextType {
@@ -76,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         engineer_id: null,
         display_name: "Admin",
         is_admin: true,
+        is_staff: true,
       });
       setLoading(false);
       return;

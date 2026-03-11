@@ -28,18 +28,30 @@ if SUPABASE_URL:
     _jwks_client = PyJWKClient(f"{SUPABASE_URL}/auth/v1/.well-known/jwks.json")
 
 
+VALID_ROLES = ("admin", "sales", "engineer")
+
+
 @dataclass
 class CurrentUser:
     """認証済みユーザー情報。"""
     id: str  # Supabase Auth UUID
     email: str
-    role: str  # "admin" | "engineer"
+    role: str  # "admin" | "sales" | "engineer"
     engineer_id: Optional[int] = None
     display_name: str = ""
 
     @property
     def is_admin(self) -> bool:
         return self.role == "admin"
+
+    @property
+    def is_sales(self) -> bool:
+        return self.role == "sales"
+
+    @property
+    def is_staff(self) -> bool:
+        """admin または sales（業務スタッフ）。"""
+        return self.role in ("admin", "sales")
 
 
 def _dummy_admin() -> CurrentUser:
@@ -122,3 +134,17 @@ async def require_admin(user: CurrentUser = Depends(get_current_user)) -> Curren
     if not user.is_admin:
         raise HTTPException(status_code=403, detail="管理者権限が必要です")
     return user
+
+
+def require_roles(*roles: str):
+    """指定ロールのいずれかを持つユーザーのみ許可する依存関数ファクトリ。"""
+    async def _check(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+        if user.role not in roles:
+            raise HTTPException(status_code=403, detail="この操作を行う権限がありません")
+        return user
+    return _check
+
+
+# よく使う組み合わせ
+require_staff = require_roles("admin", "sales")
+require_engineer = require_roles("engineer")
