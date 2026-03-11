@@ -1102,7 +1102,7 @@ def get_total_stats(date_from: str = "", date_to: str = "") -> dict:
                 SUM(CASE WHEN {today_expr} THEN 1 ELSE 0 END) as today_count
             FROM job_listings {base_where}
         """
-        row = conn.execute(query, params + [today]).fetchone()
+        row = conn.execute(query, [today] + params).fetchone()
         row = dict(row)
 
     return {
