@@ -27,7 +27,7 @@ const NAV_ITEMS: NavItem[] = [
 
 const ROLE_LABELS: Record<Role, string> = {
   admin: "管理者",
-  sales: "営業",
+  sales: "スタッフ",
   engineer: "エンジニア",
 };
 

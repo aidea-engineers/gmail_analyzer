@@ -271,7 +271,7 @@ export default function AdminUsersPage() {
                 style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}
               >
                 <option value="engineer">エンジニア</option>
-                <option value="sales">営業</option>
+                <option value="sales">スタッフ</option>
                 <option value="admin">管理者</option>
               </select>
             </div>
@@ -362,7 +362,7 @@ export default function AdminUsersPage() {
                 style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}
               >
                 <option value="engineer">エンジニア</option>
-                <option value="sales">営業</option>
+                <option value="sales">スタッフ</option>
                 <option value="admin">管理者</option>
               </select>
             </div>
@@ -503,7 +503,7 @@ export default function AdminUsersPage() {
                             : "bg-blue-100 text-blue-700"
                         }`}
                       >
-                        {u.role === "admin" ? "管理者" : u.role === "sales" ? "営業" : "エンジニア"}
+                        {u.role === "admin" ? "管理者" : u.role === "sales" ? "スタッフ" : "エンジニア"}
                       </span>
                     </td>
                     <td className="px-4 py-3" style={{ color: "var(--foreground)" }}>
