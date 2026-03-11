@@ -83,8 +83,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    // 招待リンク経由かどうかをチェック（supabase.tsで検出してセッションストレージに記録）
+    function checkAndRedirectIfInvite(session: import("@supabase/supabase-js").Session | null): boolean {
+      if (!session) return false;
+      const isPendingInvite = sessionStorage.getItem("pending_invite") === "1";
+      if (isPendingInvite && typeof window !== "undefined" && !window.location.pathname.startsWith("/set-password")) {
+        sessionStorage.removeItem("pending_invite");
+        window.location.replace("/set-password");
+        return true;
+      }
+      return false;
+    }
+
     // 初期セッション取得
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (checkAndRedirectIfInvite(session)) return; // 招待リンク → set-passwordへ
       setSession(session);
       if (session) {
         // キャッシュがあればすぐ表示し、バックグラウンドで最新化
@@ -104,6 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // セッション変更の監視（ログイン/ログアウト時）
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
+        if (checkAndRedirectIfInvite(session)) return; // 招待リンク → set-passwordへ
         setSession(session);
         if (session) {
           setLoading(true); // ログイン直後にloadingをtrueに戻す

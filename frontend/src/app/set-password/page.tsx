@@ -3,9 +3,11 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/components/AuthProvider";
 
 export default function SetPasswordPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [ready, setReady] = useState(false); // セッション確立済みかどうか
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -57,8 +59,9 @@ export default function SetPasswordPage() {
         setError(updateError.message);
       } else {
         setDone(true);
-        // 設定完了後、マイプロフィールへ
-        setTimeout(() => router.replace("/my-profile"), 2000);
+        // 設定完了後、ロールに応じたホームへ
+        const dest = user?.role === "engineer" ? "/my-profile" : "/";
+        setTimeout(() => router.replace(dest), 2000);
       }
     } catch {
       setError("パスワードの設定に失敗しました");
